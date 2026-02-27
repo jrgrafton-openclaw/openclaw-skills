@@ -52,7 +52,7 @@ When handed an iOS crash log, you MUST follow these steps before writing any cod
 
 ## Tooling
 
-These scripts are located in `~/.openclaw/workspace/projects/openclaw-skills/ios-crash-diagnosis/scripts/`.
+These scripts are located directly inside the skill directory (`scripts/`). Resolve them explicitly: `$(dirname $(realpath $SKILL_PATH))/scripts/`.
 
 ### 1. Crashlytics / BigQuery
 **Rule:** All iOS projects must use Firebase Crashlytics.
