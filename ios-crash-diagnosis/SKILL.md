@@ -56,7 +56,7 @@ These scripts are located directly inside the skill directory (`scripts/`). Reso
 
 ### 1. Crashlytics / BigQuery
 **Rule:** All iOS projects must use Firebase Crashlytics.
-Use `query-crashes.py --project <gcp_project> --app <bundle_id>` to fetch real-time crash stacks for an app. It automatically handles GCP auth via the default workspace SA.
+Use `query-crashes.py --project <gcp_project> --app <bundle_id>` to fetch real-time crash stacks for an app. It automatically handles GCP auth if a legacy credential exists, or uses standard Application Default Credentials.
 
 ### 2. Parse Raw Crash Logs
 Use `parse-crash.sh <crash.ips>` to extract the crashing thread, exception code, and failing frame in a readable format.
