@@ -97,6 +97,23 @@ The build already uploaded. Poll ASC until it appears as VALID, then distribute.
 - **Issuer:** `69a6de70-79a7-47e3-e053-5b8c7c11a4d1`
 - **Team ID:** `B5X96QDRF4`
 
+## First-Time App Setup (one-off, before first build)
+
+Before the first `fastlane beta` for a new app, ensure:
+
+1. **Beta group exists** — create via ASC API:
+   ```python
+   POST /v1/betaGroups  {"data":{"type":"betaGroups","attributes":{"name":"Internal Testers","isInternalGroup":true},"relationships":{"app":{"data":{"type":"apps","id":"<APP_ID>"}}}}}
+   ```
+
+2. **Testers are explicitly added to the group** — internal groups do NOT auto-invite team members. You must create/add each tester:
+   ```python
+   POST /v1/betaTesters  {"data":{"type":"betaTesters","attributes":{"firstName":"James","lastName":"Grafton","email":"jrgrafton@gmail.com"},"relationships":{"betaGroups":{"data":[{"type":"betaGroups","id":"<GROUP_ID>"}]}}}}
+   ```
+   This sends the TestFlight invite email. Without this step, the build lands in the group but nobody gets notified or can install it. 409 on this endpoint means the tester already exists — that's fine if `inviteType: EMAIL` is set.
+
+3. **Git remote configured** — `gh repo create <org>/<name> --public --source=. --push`
+
 ## Fastfile Architecture
 
 Every Fastfile should follow this pattern:
@@ -130,4 +147,4 @@ Every Fastfile should follow this pattern:
 | `LaunchScreen` / `UILaunchScreen` missing | No launch storyboard in bundle | Add `<key>UILaunchScreen</key><dict/>` to Info.plist (iOS 14+) |
 | `push_git_tags` fails "not a git repository" | No git remote configured | `gh repo create <org>/<name> --public --source=. --push` |
 | altool fails but pipeline continues | `grep` at end of pipe swallows exit code | Add `set -o pipefail` at start of sh block |
-| Internal tester 409 on `betaTesters` add | Internal groups auto-include team members | No action needed — they're already in |
+| Build in group but no invite sent | Testers not explicitly added to group | `POST /v1/betaTesters` with group relationship — required even for internal groups |
