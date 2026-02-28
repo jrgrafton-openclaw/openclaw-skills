@@ -114,6 +114,24 @@ Before the first `fastlane beta` for a new app, ensure:
 
 3. **Git remote configured** — `gh repo create <org>/<name> --public --source=. --push`
 
+4. **`.gitignore` includes build artifacts** — IPAs, dSYMs, certs, profiles, and `build/` must NEVER be committed. Ensure these patterns exist:
+   ```
+   build/
+   *.ipa
+   *.app.dSYM.zip
+   *.xcarchive
+   *.cer
+   *.mobileprovision
+   *.p12
+   fastlane/report.xml
+   fastlane/README.md
+   fastlane/*.mobileprovision
+   xcuserdata/
+   DerivedData/
+   .DS_Store
+   ```
+   Fastlane fetches certs/profiles at build time — they are ephemeral, not source code.
+
 ## Fastfile Architecture
 
 Every Fastfile should follow this pattern:
