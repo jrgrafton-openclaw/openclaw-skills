@@ -84,10 +84,12 @@ The build already uploaded. Poll ASC until it appears as VALID, then distribute.
 - **Info.plist:** `SingCoach/Info.plist`
 
 ### SwiftDesignPlayground
+- **ASC App ID:** `6759811915`
 - **Bundle ID:** `com.jrgrafton.swift.design.playground`
 - **Project Path:** `projects/SwiftDesignPlayground/`
 - **Info.plist:** `Info.plist`
-- **Internal Testers Group:** TBD (needs setup)
+- **Internal Testers Group:** `3e9bf740-1bea-4a46-b0e7-e0b569e55f6b`
+- **GitHub:** `jrgrafton-openclaw/SwiftDesignPlayground`
 
 ### ASC API Credentials
 - **Key:** `~/.openclaw/secrets/app-store-connect/AuthKey_7UKLD4C2CC.p8`
@@ -125,3 +127,7 @@ Every Fastfile should follow this pattern:
 | ASC API 422 on beta group add | Build still PROCESSING | Poll until VALID (10s intervals, 15 min timeout) |
 | Crashlytics dSYM upload hangs | Network call blocks xcodebuild | Set `SKIP_CRASHLYTICS_DSYM_UPLOAD=1` |
 | altool "version already used" | Duplicate upload | Don't re-upload; poll ASC + distribute |
+| `LaunchScreen` / `UILaunchScreen` missing | No launch storyboard in bundle | Add `<key>UILaunchScreen</key><dict/>` to Info.plist (iOS 14+) |
+| `push_git_tags` fails "not a git repository" | No git remote configured | `gh repo create <org>/<name> --public --source=. --push` |
+| altool fails but pipeline continues | `grep` at end of pipe swallows exit code | Add `set -o pipefail` at start of sh block |
+| Internal tester 409 on `betaTesters` add | Internal groups auto-include team members | No action needed — they're already in |
