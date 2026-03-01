@@ -37,17 +37,33 @@ def get_json(url):
 
 print(f"=== Recent builds for app {APP_ID} ===")
 builds = get_json(
-    f"https://api.appstoreconnect.apple.com/v1/apps/{APP_ID}/builds?limit=10&fields[builds]=version,processingState"
+    f"https://api.appstoreconnect.apple.com/v1/apps/{APP_ID}/builds?limit=30&fields[builds]=version,processingState,uploadedDate"
 )
-for b in builds["data"]:
+builds_sorted = sorted(builds["data"], key=lambda b: int(b["attributes"]["version"]), reverse=True)
+for b in builds_sorted[:15]:
     a = b["attributes"]
-    print(f"  Build {a['version']} — {a['processingState']}")
+    uploaded = a.get("uploadedDate", "N/A")
+    print(f"  Build {a['version']} — {a['processingState']} (uploaded: {uploaded})")
 
 if GROUP_ID:
     print(f"\n=== Builds in beta group {GROUP_ID} ===")
     group_builds = get_json(
-        f"https://api.appstoreconnect.apple.com/v1/betaGroups/{GROUP_ID}/builds?limit=10&fields[builds]=version,processingState"
+        f"https://api.appstoreconnect.apple.com/v1/betaGroups/{GROUP_ID}/builds?limit=30&fields[builds]=version,processingState"
     )
-    for b in group_builds["data"]:
+    group_versions = {b["attributes"]["version"] for b in group_builds["data"]}
+    for b in sorted(group_builds["data"], key=lambda x: int(x["attributes"]["version"]), reverse=True)[:10]:
         a = b["attributes"]
         print(f"  Build {a['version']} — {a['processingState']}")
+
+    # Flag any builds NOT in the group
+    all_versions = {b["attributes"]["version"] for b in builds_sorted}
+    missing = []
+    for b in builds_sorted:
+        v = b["attributes"]["version"]
+        if v not in group_versions and b["attributes"]["processingState"] == "VALID":
+            missing.append(v)
+    if missing:
+        print(f"\n⚠️  UNDISTRIBUTED VALID builds: {', '.join(missing)}")
+        print(f"   Run: python3 verify-and-distribute.py {APP_ID} {GROUP_ID}")
+    else:
+        print(f"\n✅ All VALID builds are distributed.")

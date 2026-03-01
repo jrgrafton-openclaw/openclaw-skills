@@ -12,6 +12,50 @@ description: Build, sign, upload, and distribute iOS apps to TestFlight via Fast
 3. **NEVER use `xcpretty`** — it crashes on non-ASCII output and hides the real build result.
 4. **NEVER run fastlane in background without feedback** — always run foreground with a timeout, or use `yieldMs: 300000` (5 min) and poll.
 5. **ALWAYS audit build state before running `fastlane beta`** — check git status, existing IPA, and ASC builds first.
+6. **ALWAYS run `verify-and-distribute.py` after every build** — this is the safety net that catches undistributed builds when sessions die during ASC processing.
+7. **ALWAYS verify distribution succeeded before reporting to the user** — never say "shipped" until you've confirmed the build is in the beta group.
+
+## Post-Build Verification (MANDATORY after every build)
+
+**This is the #1 lesson from builds 77/78 being uploaded but never distributed.**
+
+After `fastlane beta` completes (or times out, or the session dies), ALWAYS run:
+
+```bash
+python3 <SKILL_DIR>/scripts/verify-and-distribute.py [APP_ID] [GROUP_ID]
+```
+
+This script:
+- Fetches all recent builds from ASC (limit=30, not 10)
+- Compares against what's in the beta group
+- Automatically distributes any VALID builds that are missing from the group
+- Reports PROCESSING builds that need a re-check later
+
+**Run it even if `fastlane beta` reports success.** The Fastfile's inline distribution can silently fail if the ASC API returns a transient error, or if the session is killed during the 2-15 minute processing wait.
+
+### Session Timeout Recovery Pattern
+
+When running `fastlane beta` via OpenClaw, the session may time out during the ASC processing poll (the longest step, 2-15 min). If this happens:
+
+1. The IPA uploaded successfully (altool completed before the poll)
+2. The build number was incremented in Info.plist
+3. But: distribution never happened, git commit never happened
+
+**Recovery:**
+```bash
+cd <PROJECT_ROOT>
+
+# 1. Check what happened
+python3 <SKILL_DIR>/scripts/check-asc-builds.py
+
+# 2. Distribute any undistributed builds
+python3 <SKILL_DIR>/scripts/verify-and-distribute.py
+
+# 3. Fix git state
+git add -A
+git commit -m "[ci skip] Bump build to <N> — recovered from session timeout"
+git push
+```
 
 ## Pre-Flight Checklist (MANDATORY before every build)
 
@@ -30,13 +74,15 @@ ls -la build/*.ipa 2>/dev/null
 # 3. Check current build number
 /usr/libexec/PlistBuddy -c 'Print CFBundleVersion' <PATH_TO_INFO_PLIST>
 
-# 4. Check what's in ASC (use scripts/check-asc-builds.py)
+# 4. Check what's in ASC — this now flags undistributed builds
 python3 <SKILL_DIR>/scripts/check-asc-builds.py
 ```
 
 **If Info.plist is modified (dirty):** A prior run crashed after bumping the build number. Reset with `git checkout <Info.plist path>` OR verify the build already uploaded to ASC before retrying.
 
 **If an IPA exists and is recent:** The prior run may have succeeded. Check ASC before rebuilding.
+
+**If check-asc-builds.py flags undistributed builds:** Run `verify-and-distribute.py` before doing anything else.
 
 ## Running the Build
 
@@ -58,7 +104,31 @@ exec(command: "cd <path> && LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 bundle exec fast
 
 If the command backgrounds, poll with `process(action: "poll", sessionId: "<id>", timeout: 60000)` every 60 seconds until complete. **Report progress to the user immediately** — don't wait for the full pipeline to finish.
 
+**AFTER the build completes or times out:**
+```
+exec(command: "python3 <SKILL_DIR>/scripts/verify-and-distribute.py [APP_ID] [GROUP_ID]")
+```
+
+Only tell the user the build shipped after this verification passes.
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/check-asc-builds.py` | Audit: show recent builds + distribution status, flag gaps |
+| `scripts/distribute-build.py <VERSION>` | Distribute a specific build (polls until VALID first) |
+| `scripts/verify-and-distribute.py` | **Safety net:** find and fix ALL undistributed builds |
+
+All scripts default to SingCoach IDs but accept `[APP_ID] [GROUP_ID]` args for any app.
+
 ## Recovery from Partial Failures
+
+### Build uploaded but not distributed (SESSION TIMEOUT — most common)
+```bash
+python3 <SKILL_DIR>/scripts/verify-and-distribute.py
+# Then fix git state:
+git add -A && git commit -m "[ci skip] Bump build to <N>" && git push
+```
 
 ### Build uploaded but git commit failed
 The build is already on TestFlight. Just fix and commit:
@@ -68,11 +138,11 @@ git commit -m "[ci skip] Bump build to <N>"
 git push
 ```
 
-### Build uploaded but not distributed
-Use `scripts/distribute-build.py <BUILD_VERSION>` to add to beta group.
-
 ### altool says "bundle version already used"
-The build already uploaded. Poll ASC until it appears as VALID, then distribute.
+The build already uploaded. Poll ASC until it appears as VALID, then distribute:
+```bash
+python3 <SKILL_DIR>/scripts/distribute-build.py <VERSION>
+```
 
 ## Project-Specific IDs
 
@@ -151,10 +221,13 @@ Every Fastfile should follow this pattern:
    - Poll ASC API until VALID, then add to beta group
    - Git tag, commit (with `allow_nothing_to_commit: true`), push
 
+**Known vulnerability:** The ASC poll + beta group add (step 11) runs inline in the Fastfile. If the OpenClaw session dies during this 2-15 minute window, the upload succeeds but distribution doesn't happen. **The `verify-and-distribute.py` safety net exists specifically for this case.** Always run it after the build, regardless of outcome.
+
 ## Common Failure Modes
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
+| Build uploaded but not shared | Session died during ASC poll | `verify-and-distribute.py` |
 | `invalid byte sequence in US-ASCII` | Missing `LC_ALL`/`LANG` | Set env vars in `before_all` |
 | `errSecInternalComponent` | Keychain locked | `security unlock-keychain` + `set-key-partition-list` |
 | `No profiles found` at export | Hardcoded/wrong profile UUID | Use dynamic `profile_uuid` from `sigh` |
@@ -166,3 +239,4 @@ Every Fastfile should follow this pattern:
 | `push_git_tags` fails "not a git repository" | No git remote configured | `gh repo create <org>/<name> --public --source=. --push` |
 | altool fails but pipeline continues | `grep` at end of pipe swallows exit code | Add `set -o pipefail` at start of sh block |
 | Build in group but no invite sent | Testers not explicitly added to group | `POST /v1/betaTesters` with group relationship — required even for internal groups |
+| `check-asc-builds.py` misses builds | `limit=10` too low, ASC returns arbitrary order | Use `limit=30` (now the default) |
