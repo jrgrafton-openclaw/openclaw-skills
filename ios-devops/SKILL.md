@@ -1,6 +1,6 @@
 ---
 name: ios-devops
-description: Build, sign, upload, and distribute iOS apps to TestFlight via Fastlane and the App Store Connect API. Use when asked to deploy, ship, build, push to TestFlight, run fastlane beta, or distribute any iOS app. Also covers recovery from failed/partial builds, build state auditing, and ASC API operations. NOT for: Xcode project setup (use ios-prototype), crash diagnosis (use ios-crash-diagnosis), or Swift concurrency issues (use ios-swift6-concurrency).
+description: "Build, sign, upload, and distribute iOS apps to TestFlight via Fastlane and the App Store Connect API. Use when asked to deploy, ship, build, push to TestFlight, run fastlane beta, or distribute any iOS app. Also covers recovery from failed/partial builds, build state auditing, and ASC API operations. NOT for: Xcode project setup (use ios-prototype), crash diagnosis (use ios-crash-diagnosis), or Swift concurrency issues (use ios-swift6-concurrency)."
 ---
 
 # iOS DevOps — Build & Ship to TestFlight

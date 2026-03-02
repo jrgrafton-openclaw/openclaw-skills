@@ -1,6 +1,6 @@
 ---
 name: ios-prototype
-description: Zero-friction SwiftUI prototyping in a live design playground. Use when: rapidly iterating on UI/UX natively, taking simulator screenshots to share, pushing a UI build to TestFlight, or merging a prototype into the active app. Always pair with apple-hig skill. NOT for: full app builds (use ios-devops) or crash diagnosis.
+description: "Zero-friction SwiftUI prototyping in a live design playground. Use when: rapidly iterating on UI/UX natively, taking simulator screenshots to share, pushing a UI build to TestFlight, or merging a prototype into the active app. Always pair with apple-hig skill. NOT for: full app builds (use ios-devops) or crash diagnosis."
 ---
 
 # ios-prototype

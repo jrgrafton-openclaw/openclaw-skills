@@ -1,6 +1,6 @@
 ---
 name: firebase
-description: Manage Firebase projects and apps from the terminal using a GCP Service Account — no manual login required. Use when: registering a new iOS app in Firebase, fetching GoogleService-Info.plist, or automating Firebase project operations. NOT for: crash analysis (use ios-crash-diagnosis) or general GCP billing.
+description: "Manage Firebase projects and apps from the terminal using a GCP Service Account — no manual login required. Use when: registering a new iOS app in Firebase, fetching GoogleService-Info.plist, or automating Firebase project operations. NOT for: crash analysis (use ios-crash-diagnosis) or general GCP billing."
 ---
 
 # Firebase Skill
