@@ -10,9 +10,15 @@ description: "Orchestrate sub-agent sessions via sessions_spawn for long-running
 Spawn when: isolated task, clear acceptance criteria, full context can be written up front.  
 Do inline when: needs clarification, fast (under 5 min), or result feeds immediately into next step.
 
-## Always: `thread: true` in Threaded Channels
+## `thread: true` — Platform Support Warning
 
-In Slack threads, Telegram replies, or any threaded surface — **always pass `thread: true`**:
+**⚠️ Slack limitation:** Thread-bound sub-agent routing is **not supported on Slack**. Passing `thread: true` will spawn the agent fine, but you'll see:
+
+> *"The sub-agent spawned but the routing hooks aren't available on this channel — it'll run but I won't get an auto-report."*
+
+This is a known OpenClaw platform gap — Discord has `session.threadBindings.*` hooks but Slack's equivalent doesn't exist yet. Tracked at: **https://github.com/openclaw/openclaw/issues/23414**
+
+**On Discord / Telegram** (threaded surfaces that support hooks) — always pass `thread: true`:
 
 ```ts
 sessions_spawn({
@@ -23,7 +29,18 @@ sessions_spawn({
 })
 ```
 
-Without `thread: true`, the completion announcement goes to the main channel and is invisible in the current thread.
+**On Slack** — omit `thread: true`. Poll manually when needed:
+
+```ts
+sessions_spawn({
+  task: "...",
+  mode: "run",
+  // no thread: true — hooks not available on Slack
+  runTimeoutSeconds: 600,
+})
+```
+
+After spawning on Slack: use `subagents(action=list)` → `sessions_history` to check status, then manually post results back to the channel.
 
 ## Pre-flight: Gateway Scope Check
 
