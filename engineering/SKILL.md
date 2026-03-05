@@ -33,10 +33,8 @@ Why not commit it? Plans go stale. What matters is the _result_ — tests, code,
 ## CHANGELOG via git-cliff
 
 ```bash
-# Setup (once per project)
-cp skills/engineering/assets/cliff.toml.template <project>/cliff.toml
-# Add to package.json scripts:
-#   "changelog": "git cliff -o CHANGELOG.md"
+# Setup (once per project) — copies cliff.toml + patches package.json if present
+bash skills/engineering/assets/setup-cliff.sh <project-dir>
 
 # Update after each release/tag
 git cliff -o CHANGELOG.md

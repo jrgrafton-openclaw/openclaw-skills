@@ -92,9 +92,17 @@ LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 bundle exec fastlane beta
 ```
 
 **Expected timing:**
-- Small app (SwiftDesignPlayground): ~60 seconds
-- Medium app (SingCoach): ~4 minutes
-- ASC processing poll: additional 2-15 minutes
+
+| Phase | Time |
+|-------|------|
+| Build + archive (SingCoach) | ~3–4 min |
+| altool upload | ~1–2 min |
+| ASC processing (PROCESSING → VALID) | **5 min – several hours** (Apple's queue, uncontrollable) |
+| verify-and-distribute.py | ~30 sec |
+| **Total** | **~7 min – hours** |
+
+Small app (SwiftDesignPlayground): build ~60s; ASC processing same variable range.
+**Do not re-upload if PROCESSING takes longer than expected — just wait. Duplicate uploads waste time and can confuse ASC.**
 
 **Exec pattern for OpenClaw:** Use `yieldMs: 300000` (5 min) for small apps, `yieldMs: 600000` (10 min) for medium apps. Then poll. Do NOT use `background: true` without polling.
 
