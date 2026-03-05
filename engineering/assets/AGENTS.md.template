@@ -1,0 +1,44 @@
+# AGENTS.md — [Project Name]
+
+> One-line description of what this project does.
+
+## Quick Start
+
+```bash
+# Install
+[install command]
+
+# Build
+[build command]
+
+# Test
+[test command]
+
+# Run / Dev
+[run command]
+```
+
+## Architecture
+
+[2–4 sentences: what are the key packages/modules and how do they relate?]
+
+Key directories:
+- `[dir]` — [purpose]
+- `[dir]` — [purpose]
+
+## Key Decisions
+
+- **[Decision]:** [Why this approach was chosen]
+- **[Decision]:** [Why this approach was chosen]
+
+## Conventions
+
+- Commits: `type(scope): description` (conventional commits)
+- Branch: feature work on `feat/` branches, never directly on `main`
+- Tests: write tests before implementation; CI must pass before merge
+- CHANGELOG: run `[changelog command]` after tagging a release
+
+## Gotchas
+
+- [Known issue or non-obvious behaviour]
+- [Known issue or non-obvious behaviour]

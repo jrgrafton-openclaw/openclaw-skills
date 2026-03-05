@@ -1,0 +1,38 @@
+# Plan: [Feature Name]
+
+**Branch:** `feat/[branch-name]`  
+**Started:** [date]
+
+## Goal
+
+[One sentence: what does "done" look like for the user?]
+
+## Steps
+
+- [ ] 1. [Step — specific, verifiable]
+- [ ] 2. [Step]
+- [ ] 3. [Step]
+- [ ] 4. [Step]
+- [ ] 5. [Step — e.g. "All N tests pass, build clean"]
+- [ ] 6. Commit + tag + push
+
+## Acceptance Criteria
+
+- [ ] `pnpm test` passes — N tests (current: X)
+- [ ] `pnpm build` passes with no TS/lint errors
+- [ ] [Specific behaviour]: [how to verify]
+- [ ] CHANGELOG.md updated
+
+## Key Risks / Unknowns
+
+- [Risk: what could go wrong?]
+- [Unknown: what needs discovery?]
+
+## Files to Touch
+
+- `[file]` — [what changes]
+- `[file]` — [what changes]
+
+---
+
+_Delete this file when the feature merges to main._
