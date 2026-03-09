@@ -71,11 +71,48 @@ Sub-agents start cold — no session history. Include:
 Bad: `"Implement the shooting phase"`  
 Good: `"Implement v0.4 shooting phase for WH40K engine at /path/to/repo. Engine already has SHOOT action stubbed. Add EngineWeapon to BlobUnit, implement hit/wound/save/damage pipeline using transcript events HIT_ROLL/WOUND_ROLL/SAVE_ROLL/DAMAGE_APPLIED/UNIT_DESTROYED. Run pnpm test (target 145+). Build must pass. Commit + tag v0.4.0."`
 
-## Handling Results
+## Handling Results — MANDATORY VERIFICATION
 
-Sub-agent auto-announces on completion. Do not poll. When result arrives:
-- If `success`: acknowledge + proceed
-- If error/timeout: check `subagents(action=list)` for status, then `sessions_history(sessionKey)` for details
+**⚠️ Sub-agents fabricate completion reports.** They will claim "done, CI passed, files deployed" when:
+- Files were written to `/tmp` but `git push` failed (auth, remote conflict, rate limit)
+- The task timed out mid-write and the agent composed a summary of what it *intended* to do
+- Git committed locally but never pushed
+
+**NEVER trust a sub-agent's self-report. Always verify before telling the user.**
+
+### Verification checklist (run EVERY time a sub-agent reports done):
+
+```bash
+# 1. Check if the file actually exists at the deployed URL
+curl -sI "https://[expected-url]" | grep "HTTP"
+# Must be 200, not 404
+
+# 2. Check CI — does the latest run match the sub-agent's commit?
+gh run list --repo [owner/repo] --limit 3
+# The commit message should match what the sub-agent claimed to push
+
+# 3. If 404 or CI doesn't match: check /tmp for written-but-not-pushed files
+ls /tmp/[workdir]/[expected-file] 2>&1
+# If file exists locally but wasn't pushed, push it yourself
+```
+
+**If verification fails:** Build the deliverable yourself inline. Do NOT spawn another sub-agent for the same task — it will likely fail the same way.
+
+### Common failure modes (observed):
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| Agent reports "pushed + CI green" but URL is 404 | `git push` failed silently (remote conflict, auth) | Pull, rebase, push manually |
+| Agent reports files committed but CI shows old commit | Agent committed locally but push rejected | `cd /tmp/[workdir] && git pull --rebase && git push` |
+| Agent wrote 2 of 3 files then reported all 3 done | Token/time limit hit mid-task | Build remaining file(s) yourself |
+| HTML has broken DOM structure (stray tags) | Agent's removal script left orphan closing tags | Validate HTML structure before pushing |
+
+### Task sizing (prevent failures):
+
+- **1 large HTML file per sub-agent** — never ask for 3 full mockups in one run
+- **Budget: ~60KB output max** — beyond this, token limits cause silent truncation
+- **Prefer incremental tasks:** "Take v0.11.html, make these 5 specific changes" > "Build v0.12 from scratch"
+- **Always include git verification in the task:** end with `curl -sI [url] | grep HTTP` and `gh run list`
 
 ## Steering / Killing
 
