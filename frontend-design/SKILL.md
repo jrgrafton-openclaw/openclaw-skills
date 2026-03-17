@@ -37,4 +37,14 @@ Interpret creatively and make unexpected choices that feel genuinely designed fo
 
 **IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
 
+## Icons
+
+When creating SVG icons for a UI system:
+- **Inline SVG only** — no emoji, no icon libraries, no external assets. Draw with `stroke="currentColor"` so color inherits from CSS.
+- **Consistent stroke-width** — pick ONE stroke-width (e.g. 1.8) and use it across ALL icons in the set. Internal details can be slightly thinner (e.g. 1.4) but the primary outlines must match.
+- **No fills** — icons should be pure stroke outlines. Never use `fill="currentColor"` or `opacity` on icon elements. Fills create inconsistent visual weight across icons with different shapes/areas.
+- **Hover via CSS only** — change `color` (which drives `currentColor`) and optionally add `filter: drop-shadow()`. Never use per-icon fill effects — they're impossible to keep consistent.
+- **Uniform viewBox** — use `viewBox="0 0 24 24"` for all icons in a set.
+- **Visual verification** — always screenshot and hover-test the full icon set together. Inconsistencies are only visible when icons are side-by-side.
+
 Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
