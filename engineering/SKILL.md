@@ -1,6 +1,6 @@
 ---
 name: engineering
-description: "Agentic engineering conventions for every project: project file structure (AGENTS.md, CHANGELOG.md, architecture.md), workspace-root plan.md workflow, mandatory git worktrees for feature work, conventional commits, explicit PR writeups (features implemented + bugs fixed + verification), Codex review wait/evaluate/fix loop, and branch/test/merge/deploy/cleanup discipline. Use when starting a new project, onboarding onto an existing one, or when asked about engineering process, planning workflow, PR workflow, or changelog setup. NOT for platform-specific build/deploy steps (use ios-devops, gh-issues, etc.)."
+description: "Agentic engineering conventions for every project: project file structure (AGENTS.md, CHANGELOG.md, architecture.md), workspace-root plan.md workflow, mandatory git worktrees for feature work, conventional commits, explicit PR writeups (features implemented + bugs fixed + verification), Codex review wait/evaluate/fix loop, and branch/test/merge/deploy/cleanup discipline. Use when: (1) starting a new project, (2) onboarding onto an existing one, (3) implementing any non-trivial feature (3+ steps, multiple interacting subsystems, or transform/state pipeline work), (4) asked about engineering process, planning workflow, PR workflow, or changelog setup. NOT for platform-specific build/deploy steps (use ios-devops, gh-issues, etc.)."
 ---
 
 # Engineering Conventions
@@ -117,13 +117,14 @@ Requires **conventional commits** — see `references/agentic-practices.md` for 
 
 See `references/agentic-practices.md` for the full guide. Quick rules:
 
-1. **Tests before implementation** — write the test, watch it fail, then implement
-2. **Worktree + feature branch** — never do non-trivial work directly on `main`
-3. **Conventional commits** — `type(scope): description` on every commit
-4. **CI must pass** before merging — never merge red
-5. **Verify before "done"** — run tests, check build, confirm acceptance criteria met
-6. **Commit small** — each commit = one logical change, buildable
-7. **Update CHANGELOG** — run `pnpm changelog` (or equivalent) before tagging a release
-8. **Wait for review by default** — do not merge immediately after opening a PR unless the user explicitly asks
-9. **Verify after merge** — confirm merge landed and confirm deploy/artifact status when relevant
-10. **Clean up branches/worktrees** — keep the repo tidy after merge
+1. **Read before writing** — before implementing code that touches transforms, state pipelines, undo systems, or any multi-layered subsystem, **read ALL interacting code first**. Trace one concrete example through the full pipeline with real values before designing. Don't reason about composed transforms abstractly — they combine in non-obvious ways (e.g. flip-aware crop + rotation + clip paths).
+2. **Tests before implementation** — write the test, watch it fail, then implement
+3. **Worktree + feature branch** — never do non-trivial work directly on `main`
+4. **Conventional commits** — `type(scope): description` on every commit
+5. **CI must pass** before merging — never merge red
+6. **Verify before "done"** — run tests, check build, confirm acceptance criteria met
+7. **Commit small** — each commit = one logical change, buildable
+8. **Update CHANGELOG** — run `pnpm changelog` (or equivalent) before tagging a release
+9. **Wait for review by default** — do not merge immediately after opening a PR unless the user explicitly asks
+10. **Verify after merge** — confirm merge landed and confirm deploy/artifact status when relevant
+11. **Clean up branches/worktrees** — keep the repo tidy after merge
