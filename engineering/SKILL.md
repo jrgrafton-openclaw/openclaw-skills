@@ -113,6 +113,47 @@ git cliff -o CHANGELOG.md
 
 Requires **conventional commits** — see `references/agentic-practices.md` for the format.
 
+## PR Preview for Static HTML / GitHub Pages Projects
+
+When a project deploys static HTML to GitHub Pages (via `peaceiris/actions-gh-pages` or similar), add a **PR preview workflow** so every PR gets its own live URL for side-by-side comparison.
+
+Add `.github/workflows/pr-preview.yml`:
+
+```yaml
+name: PR Preview
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Add your project's build steps here (pnpm install, build, etc.)
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist          # adjust to your build output
+          publish_branch: gh-pages
+          destination_dir: preview/pr-${{ github.event.pull_request.number }}
+          keep_files: true
+      - uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            🔍 **Preview deployed:** https://<owner>.github.io/<repo>/preview/pr-${{ github.event.pull_request.number }}/
+```
+
+**Key points:**
+- `destination_dir` isolates each PR's build under `preview/pr-N/` so it doesn't clobber production
+- `keep_files: true` preserves the main site + other PR previews
+- The comment auto-posts the preview link on the PR
+- Consider adding a cleanup workflow that removes `preview/pr-N/` when the PR is closed/merged
+- Only use this for projects with static HTML output — not for projects that deploy via other mechanisms
+
 ## Agentic Engineering Practices
 
 See `references/agentic-practices.md` for the full guide. Quick rules:
