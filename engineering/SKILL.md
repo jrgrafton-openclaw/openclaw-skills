@@ -195,7 +195,9 @@ Never batch multiple fixes (e.g. preserveAspectRatio + migration + probe fix) �
 See `references/agentic-practices.md` for the full guide. Quick rules:
 
 1. **Read before writing** — before implementing code that touches transforms, state pipelines, undo systems, or any multi-layered subsystem, **read ALL interacting code first**. Trace one concrete example through the full pipeline with real values before designing. Don't reason about composed transforms abstractly — they combine in non-obvious ways (e.g. flip-aware crop + rotation + clip paths).
-2. **Tests before implementation** — write the test, watch it fail, then implement
+2. **Reproduce before fixing** — before writing ANY fix, reproduce the exact bug. For visual bugs: in the browser. For logic bugs: with a failing test. If you can't reproduce it, you don't understand it yet.
+3. **Stop after a failed fix** — if a fix doesn't work, do NOT immediately try another approach. First: explain WHY the previous fix failed. Write it down. Only then design the next attempt. Two failed fixes in a row = step back, read all interacting code, and restate the problem from scratch.
+4. **Tests before implementation** — write the test, watch it fail, then implement
 3. **Worktree + feature branch** — never do non-trivial work directly on `main`
 4. **Conventional commits** — `type(scope): description` on every commit
 5. **CI must pass** before merging — never merge red
