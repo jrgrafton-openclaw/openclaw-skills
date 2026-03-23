@@ -28,6 +28,15 @@ Lifecycle:
 2. **Work** — check off steps, update with discoveries
 3. **Delete** when the feature merges to main
 
+### Plans Must Include Tests
+
+Every plan presented to the user — whether a plan.md file, a Slack message, or a sub-agent task — must include a **Tests** section listing what tests will be written. Tests are not an implementation detail; they define acceptance criteria.
+
+Bad: "Step 1: add color helper. Step 2: wire it up. Step 3: add slider."
+Good: "Step 1: add color helper. Step 2: wire it up. Step 3: add slider. **Tests:** color helper edge cases, serialize round-trip, backwards compat, visual verification with non-default color."
+
+If you present a plan without tests, you haven't finished planning.
+
 ---
 
 ## 2. Git Discipline
