@@ -5,9 +5,9 @@ description: "Agentic engineering conventions for every project: project file st
 
 # Engineering Conventions
 
-## Project File Checklist
+## 1. Project Setup
 
-Every project repo must have:
+### Required Files
 
 | File | Purpose | Auto-generated? |
 |------|---------|----------------|
@@ -15,11 +15,11 @@ Every project repo must have:
 | `CHANGELOG.md` | What shipped and when | Yes — via git-cliff |
 | `docs/architecture.md` | Why it's designed the way it is | No — maintain as decisions are made |
 
-**Naming: use `AGENTS.md`** — the cross-tool standard (OpenAI Codex, Cursor, Claude Code all read it). CLAUDE.md is Claude-specific; AGENTS.md works everywhere.
+**Naming: use `AGENTS.md`** — the cross-tool standard (OpenAI Codex, Cursor, Claude Code all read it).
 
 See `assets/AGENTS.md.template` for the required sections.
 
-## plan.md — Ephemeral Feature Plans
+### plan.md — Ephemeral Feature Plans
 
 `plan.md` lives at the **workspace root** (not in the project repo), not committed.
 
@@ -28,9 +28,11 @@ Lifecycle:
 2. **Work** — check off steps, update with discoveries
 3. **Delete** when the feature merges to main
 
-Why not commit it? Plans go stale. What matters is the _result_ — tests, code, CHANGELOG, architecture.md update if design changed.
+---
 
-## Worktree Policy
+## 2. Git Discipline
+
+### Worktree Policy
 
 For any non-trivial feature, fix, or PR-driven task:
 
@@ -39,171 +41,175 @@ For any non-trivial feature, fix, or PR-driven task:
 3. **Do not implement non-trivial work in the main checkout**
 
 Default sequence:
-- worktree → branch → implement/verify → PR → wait for review → address comments if worthwhile → re-verify → merge → verify deploy/CI → cleanup
+worktree → branch → implement/verify → PR → review → fix → re-verify → merge → verify deploy/CI → cleanup
 
-After merge:
-- remove the feature worktree
-- delete the local feature branch if appropriate
-- delete the remote feature branch if appropriate
-- report completion only after cleanup or after explicitly stating why cleanup was deferred
+### Conventional Commits
 
-If work is paused or waiting on feedback, preserve the worktree and report its path + branch.
+Format: `type(scope): short description`
+Types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `perf`, `ci`
 
-## Pull Request Workflow
+### Commit Sizing
 
-For GitHub-based delivery, use this default loop unless the user explicitly asks to bypass it:
+Each commit = one logical change that builds and tests green.
+For complex visual/interactive bugs: **one change per push** — make ONE change, verify, commit, then the next.
 
-1. **Implement in worktree**
-2. **Verify locally**
-3. **Open PR**
-4. **Wait for Codex review / automated review feedback**
-5. **Evaluate review comments one by one**
-6. **Fix real issues; ignore low-value noise**
-7. **Re-run verification after changes**
-8. **Merge only when CI is green and the PR is in good shape**
-9. **Verify merge + deploy status if applicable**
-10. **Inform the user**
+---
 
-Treat automated review comments as advisory, not mandatory. Validate whether each comment is:
-- correct
-- relevant
-- worth the added complexity
+## 3. Refactoring Discipline
 
-If adopting a comment, mention that in the final report. If declining one, be able to explain why briefly.
+**This section exists because of a real failure:** an entity system refactor introduced 8 bifurcated code paths because creation was unified but consumption was not audited.
 
-## PR Description Requirements
+### The Consumer-First Rule
 
-Do not open vague PRs. Every PR body should explicitly list:
+When unifying N implementations behind a shared interface:
 
-- **Features implemented**
-- **Bugs fixed**
-- **Verification performed**
-- **Follow-ups / risks** (if any)
+1. **Find ALL consumers first** — grep for every function/property that accesses the old type-specific code (`_findSprite`, `C.allSprites.find`, `sp.rootEl`, etc.)
+2. **List every call site** — not just the ones you think are relevant
+3. **Update consumers BEFORE adding new producers** — if `addToGroup()` still calls `_findSprite()`, adding a new entity type that passes through `addToGroup()` will silently fail
+4. **Test each consumer with each type** — if groups should work for sprites + FX + lights, test all three in groups
 
-Prefer concrete bullets over generic summaries.
+### The Grep Audit
 
-Good pattern:
+Before marking a refactor complete, run:
+```bash
+# Find all references to the old type-specific code
+grep -rn 'oldFunction\|oldProperty\|OldType' src/
+```
+Every hit is either: (a) intentionally type-specific (guard with comment why), or (b) a bug you need to fix.
+
+### Test With the Full Fixture
+
+When the user provides a test fixture (JSON scene, config file, etc.):
+- **Always load it** for integration testing — don't test with empty/minimal state
+- Save it as a test fixture file in the project
+- Real scenes have groups, nested entities, edge cases that empty scenes miss
+
+### Common Refactoring Traps
+
+| Trap | Example | Prevention |
+|------|---------|------------|
+| **Unified creation, bifurcated consumption** | Entity created with shared interface but `_findSprite()` still used in undo commands | Grep for all old accessors before marking done |
+| **Copied rendering, missed interaction** | FX row renders in layers panel but has no drag handlers | For every "create row" call, check: does the old type also set up event handlers? |
+| **String-based type dispatch** | `if (id.startsWith('fx'))` instead of `entity.type === 'fire'` | Use the Entity interface, not string heuristics |
+| **Partial handler coverage** | mousedown handler calls `select()` but forgets `preventDefault()` that the old code had | Diff the old handler against the new one line by line |
+
+---
+
+## 4. Implementation Workflow
+
+### Read Before Writing
+
+Before implementing code that touches transforms, state pipelines, undo systems, or any multi-layered subsystem: **read ALL interacting code first.** Trace one concrete example through the full pipeline with real values before designing.
+
+### Tests First
+
+1. Write test that describes the desired behavior
+2. Run test — confirm it **fails** (proves the test is real)
+3. Implement the minimum code to make it pass
+4. Run test — confirm it **passes**
+
+**For bug fixes:** write a test that reproduces the bug → confirm red → fix → confirm green.
+
+### Reproduce Before Fixing
+
+Before writing ANY fix, reproduce the exact bug:
+- For visual bugs: in the browser
+- For logic bugs: with a failing test
+- If you can't reproduce it, you don't understand it yet
+
+### Stop After a Failed Fix
+
+If a fix doesn't work, do NOT immediately try another approach. First: explain WHY the previous fix failed. Write it down. Two failed fixes in a row = step back, read all interacting code, restate the problem from scratch.
+
+---
+
+## 5. Visual & Interactive Verification
+
+### Screenshot Gate (Mandatory for UI Changes)
+
+1. **Before** — screenshot the current visual state
+2. **Change** — make the code change
+3. **After** — screenshot the new visual state
+4. **Compare** — confirm the difference matches intent
+5. **Only then** — commit
+
+Never commit visual changes based solely on "the math looks right."
+
+### Interactive Verification (Mandatory for Interactions)
+
+For drag, resize, rotate, click handlers:
+1. Reproduce the bug interactively before writing any fix
+2. Test the fix interactively (simulate user interaction, not just compute values)
+3. Test at multiple states (e.g. 0°, 45°, 90°, odd angles)
+4. Test edge cases (flipped, zero-size, nested in groups)
+
+### Coordinate Space Discipline
+
+When working with transforms (rotation, scale, flip, translation):
+1. **Label every variable** with its coordinate space: `// global (screen)` or `// local (pre-rotation)`
+2. **Verify with concrete numbers** at rot=0 AND rot=90 before coding
+3. **Never mix coordinate spaces**
+4. **Anchor point rule** — when resize changes rotation center, compute visual drift and compensate
+
+---
+
+## 6. Pull Request Workflow
+
+### PR Loop
+
+1. Implement in worktree
+2. Verify locally
+3. Open PR
+4. Wait for review / automated feedback
+5. Evaluate comments (correct? relevant? worth the complexity?)
+6. Fix real issues; ignore noise
+7. Re-verify after changes
+8. Merge when CI is green
+9. Verify merge + deploy
+10. Inform the user
+
+### PR Description (Required)
+
+Every PR body must explicitly list:
 
 ```md
 ## Features implemented
-- add projectile FX when hit roll starts
-- add persistent wound state for damaged multi-wound units
+- ...
 
 ## Bugs fixed
-- fix overlay drift during zoom
-- fix projectile origin/target misalignment under zoom
+- ...
 
 ## Verification
-- `pnpm test`
-- `pnpm --filter @wh40k/ui build`
-- browser QA for zoom, overlays, wound persistence
+- `pnpm test` — N tests pass
+- browser QA for [specific interactions]
+
+## Follow-ups / risks
+- ...
 ```
 
-If a PR is pure bugfix work, still separate fixes from verification. If a PR mixes new features and bugfixes, list both explicitly.
+### PR Preview for GitHub Pages
 
-## CHANGELOG via git-cliff
+Add `.github/workflows/pr-preview.yml` for static HTML projects:
+- `destination_dir: preview/pr-${{ github.event.pull_request.number }}`
+- `keep_files: true` to preserve other previews
+- Auto-comment with preview URL
+
+---
+
+## 7. CHANGELOG
 
 ```bash
-# Setup (once per project) — copies cliff.toml + patches package.json if present
+# Setup (once per project)
 bash skills/engineering/assets/setup-cliff.sh <project-dir>
 
 # Update after each release/tag
 git cliff -o CHANGELOG.md
 ```
 
-Requires **conventional commits** — see `references/agentic-practices.md` for the format.
+Requires conventional commits.
 
-## PR Preview for Static HTML / GitHub Pages Projects
+---
 
-When a project deploys static HTML to GitHub Pages (via `peaceiris/actions-gh-pages` or similar), add a **PR preview workflow** so every PR gets its own live URL for side-by-side comparison.
+## 8. Quick Reference
 
-Add `.github/workflows/pr-preview.yml`:
-
-```yaml
-name: PR Preview
-on:
-  pull_request:
-    branches: [main]
-permissions:
-  contents: write
-  pull-requests: write
-jobs:
-  preview:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # Add your project's build steps here (pnpm install, build, etc.)
-      - uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist          # adjust to your build output
-          publish_branch: gh-pages
-          destination_dir: preview/pr-${{ github.event.pull_request.number }}
-          keep_files: true
-      - uses: peter-evans/create-or-update-comment@v4
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            🔍 **Preview deployed:** https://<owner>.github.io/<repo>/preview/pr-${{ github.event.pull_request.number }}/
-```
-
-**Key points:**
-- `destination_dir` isolates each PR's build under `preview/pr-N/` so it doesn't clobber production
-- `keep_files: true` preserves the main site + other PR previews
-- The comment auto-posts the preview link on the PR
-- Consider adding a cleanup workflow that removes `preview/pr-N/` when the PR is closed/merged
-- Only use this for projects with static HTML output — not for projects that deploy via other mechanisms
-
-## Visual / UI Change Verification
-
-For any change that affects visual appearance or interactive behavior (transforms, layout, drag/resize, animations, CSS):
-
-### Mandatory: Screenshot Gate
-1. **Before** — screenshot or evaluate the current visual state in the browser
-2. **Change** — make the code change
-3. **After** — screenshot or evaluate the new visual state
-4. **Compare** — confirm the visual difference matches what was intended
-5. **Only then** — commit and push
-
-Never commit visual/UI changes based solely on "the math looks right." Math verification is necessary but NOT sufficient — you must see the actual pixels.
-
-### Mandatory: Interactive Verification
-For interactive features (drag, resize, rotate, click handlers):
-1. **Reproduce the bug** interactively before writing any fix
-2. **Test the fix** interactively (simulate the user interaction, not just compute expected values)
-3. **Test at multiple states** — e.g. for rotation-dependent code, test at 0°, 45°, 90°, and an odd angle like 24°
-4. **Test edge cases** — flipped sprites, zero-size, negative values
-
-### Coordinate Space Discipline
-When working with transforms (rotation, scale, flip, translation):
-1. **Label every variable** with its coordinate space: `// global (screen) coords` or `// local (pre-rotation) coords`
-2. **Verify with concrete numbers** at rot=0 (trivial case) AND rot=90 (axis-swap case) before coding
-3. **Never mix coordinate spaces** — if a compensation vector is computed in global space, rotate it back to local before applying to x/y
-4. **Anchor point rule** — when resize changes the rotation center, compute the visual drift of the anchor point and compensate. Derive the closed-form formula; don't iterate or guess.
-
-### One Change Per Push
-For complex visual/interactive bugs:
-1. Make ONE change
-2. Verify it visually
-3. Commit
-4. Then make the next change
-
-Never batch multiple fixes (e.g. preserveAspectRatio + migration + probe fix) — if one is wrong, you can't tell which.
-
-## Agentic Engineering Practices
-
-See `references/agentic-practices.md` for the full guide. Quick rules:
-
-1. **Read before writing** — before implementing code that touches transforms, state pipelines, undo systems, or any multi-layered subsystem, **read ALL interacting code first**. Trace one concrete example through the full pipeline with real values before designing. Don't reason about composed transforms abstractly — they combine in non-obvious ways (e.g. flip-aware crop + rotation + clip paths).
-2. **Reproduce before fixing** — before writing ANY fix, reproduce the exact bug. For visual bugs: in the browser. For logic bugs: with a failing test. If you can't reproduce it, you don't understand it yet.
-3. **Stop after a failed fix** — if a fix doesn't work, do NOT immediately try another approach. First: explain WHY the previous fix failed. Write it down. Only then design the next attempt. Two failed fixes in a row = step back, read all interacting code, and restate the problem from scratch.
-4. **Tests before implementation** — write the test, watch it fail, then implement
-3. **Worktree + feature branch** — never do non-trivial work directly on `main`
-4. **Conventional commits** — `type(scope): description` on every commit
-5. **CI must pass** before merging — never merge red
-6. **Verify before "done"** — run tests, check build, confirm acceptance criteria met
-7. **Commit small** — each commit = one logical change, buildable
-8. **Update CHANGELOG** — run `pnpm changelog` (or equivalent) before tagging a release
-9. **Wait for review by default** — do not merge immediately after opening a PR unless the user explicitly asks
-10. **Verify after merge** — confirm merge landed and confirm deploy/artifact status when relevant
-11. **Clean up branches/worktrees** — keep the repo tidy after merge
+See `references/agentic-practices.md` for expanded rationale on tests-first, branch workflow, commit discipline, and AGENTS.md quality bar.
