@@ -154,6 +154,42 @@ jobs:
 - Consider adding a cleanup workflow that removes `preview/pr-N/` when the PR is closed/merged
 - Only use this for projects with static HTML output — not for projects that deploy via other mechanisms
 
+## Visual / UI Change Verification
+
+For any change that affects visual appearance or interactive behavior (transforms, layout, drag/resize, animations, CSS):
+
+### Mandatory: Screenshot Gate
+1. **Before** — screenshot or evaluate the current visual state in the browser
+2. **Change** — make the code change
+3. **After** — screenshot or evaluate the new visual state
+4. **Compare** — confirm the visual difference matches what was intended
+5. **Only then** — commit and push
+
+Never commit visual/UI changes based solely on "the math looks right." Math verification is necessary but NOT sufficient — you must see the actual pixels.
+
+### Mandatory: Interactive Verification
+For interactive features (drag, resize, rotate, click handlers):
+1. **Reproduce the bug** interactively before writing any fix
+2. **Test the fix** interactively (simulate the user interaction, not just compute expected values)
+3. **Test at multiple states** — e.g. for rotation-dependent code, test at 0°, 45°, 90°, and an odd angle like 24°
+4. **Test edge cases** — flipped sprites, zero-size, negative values
+
+### Coordinate Space Discipline
+When working with transforms (rotation, scale, flip, translation):
+1. **Label every variable** with its coordinate space: `// global (screen) coords` or `// local (pre-rotation) coords`
+2. **Verify with concrete numbers** at rot=0 (trivial case) AND rot=90 (axis-swap case) before coding
+3. **Never mix coordinate spaces** — if a compensation vector is computed in global space, rotate it back to local before applying to x/y
+4. **Anchor point rule** — when resize changes the rotation center, compute the visual drift of the anchor point and compensate. Derive the closed-form formula; don't iterate or guess.
+
+### One Change Per Push
+For complex visual/interactive bugs:
+1. Make ONE change
+2. Verify it visually
+3. Commit
+4. Then make the next change
+
+Never batch multiple fixes (e.g. preserveAspectRatio + migration + probe fix) — if one is wrong, you can't tell which.
+
 ## Agentic Engineering Practices
 
 See `references/agentic-practices.md` for the full guide. Quick rules:
