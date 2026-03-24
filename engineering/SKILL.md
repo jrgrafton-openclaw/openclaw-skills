@@ -93,6 +93,17 @@ When the user provides a test fixture (JSON scene, config file, etc.):
 - Save it as a test fixture file in the project
 - Real scenes have groups, nested entities, edge cases that empty scenes miss
 
+### Bulk Test Failure Rule
+
+If a change breaks >10 tests, do **NOT** fix them individually. Stop.
+
+1. **Categorize** — grep the error messages, group by pattern (e.g. "Cannot read properties of undefined (reading 'init')" × 40 = one root cause)
+2. **Find the root cause** — there are almost always 1–3 root causes, not 10+ independent bugs
+3. **Fix the root cause, not the symptoms** — if 80 tests fail because the module loading order changed, fix the loader, not 80 tests
+4. **If you committed with bulk failures, revert first** — don't layer fixes on top of a broken commit. `git stash` your fixes, revert to green, reapply the original change + root-cause fix together
+
+**Anti-pattern:** Spending 20+ minutes chasing individual test failures when they all share one underlying cause (e.g. persistence format change broke test harness assumptions). Time yourself — if you've spent >5 minutes on individual failures without the count dropping significantly, step back and look for the shared root.
+
 ### Common Refactoring Traps
 
 | Trap | Example | Prevention |
