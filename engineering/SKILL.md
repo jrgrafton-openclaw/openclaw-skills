@@ -203,6 +203,13 @@ Add `.github/workflows/pr-preview.yml` for static HTML projects:
 - `keep_files: true` to preserve other previews
 - Auto-comment with preview URL
 
+### Cache Busting on Manual gh-pages Deploys
+
+When manually copying files to `gh-pages` and pushing:
+1. **Update version params** on all `<script>` and `<link>` tags in `index.html` (e.g. `?v=t1742860000` → new timestamp)
+2. **Verify after deploy** — open the page in the browser, confirm the new code is actually executing (not just served). CDNs cache per full URL including query params; stale params = stale code.
+3. If the page still shows old behavior after deploy + cache bust, check `curl -s <script-url>` to confirm the CDN is serving the new file before blaming code.
+
 ---
 
 ## 7. CHANGELOG
