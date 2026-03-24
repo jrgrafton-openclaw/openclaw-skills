@@ -145,6 +145,22 @@ If a fix doesn't work, do NOT immediately try another approach. First: explain W
 
 ## 5. Visual & Interactive Verification
 
+### Interactive QA Gate (Mandatory for UI Changes)
+
+After implementing UI changes, test EVERY interactive element before reporting done:
+
+1. **Click every button/menu item** and verify it does what it claims
+2. **Type in every input field** — test spaces, special chars, empty string, very long string
+3. **Test the full lifecycle**: create → rename → use → delete
+4. **Test state persistence**: do the action → reload page → verify state survived
+5. **Test edge cases**: 0 items, 1 item, delete the last item
+6. **Check shortcut conflicts**: focus an input field, press common shortcuts (space, arrows, letters) — they should NOT trigger editor shortcuts
+7. **Test dismissal**: click-outside closes dropdowns/modals, Esc cancels editing
+
+If you delegated to a coding agent: **do not trust its self-report.** Open the page and run through this checklist yourself. "Tests pass + screenshot looks OK" is NOT sufficient for UI work.
+
+If you cannot test interactively (no browser access), explicitly LIST what needs manual testing and tell the user you haven't verified behavior.
+
 ### Screenshot Gate (Mandatory for UI Changes)
 
 1. **Before** — screenshot the current visual state
