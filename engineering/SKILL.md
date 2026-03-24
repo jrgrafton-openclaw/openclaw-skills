@@ -145,6 +145,14 @@ If a fix doesn't work, do NOT immediately try another approach. First: explain W
 
 ## 5. Visual & Interactive Verification
 
+### Coding Agent Model Policy
+
+**Always use Opus for coding agents.** Do not use Sonnet or lesser models for delegated coding work. The cost difference is negligible ($1-2 per run) and the quality gap causes cascading failures: wrong API signatures, untested assumptions, confident false completion reports. Fixing the mess costs more than the savings.
+
+- `claude --permission-mode bypassPermissions --print --model claude-opus-4-6`
+- Sonnet is acceptable ONLY for truly isolated tasks: single-file edits with no cross-file dependencies
+- If a task touches 3+ files or has interacting subsystems, it's Opus or do it yourself
+
 ### Interactive QA Gate (Mandatory for UI Changes)
 
 After implementing UI changes, test EVERY interactive element before reporting done:
