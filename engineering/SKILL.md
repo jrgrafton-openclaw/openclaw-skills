@@ -165,15 +165,18 @@ If a fix doesn't work, do NOT immediately try another approach. First: explain W
 - Memory stopped growing AND no file changes for >10 minutes
 - Process exited with error code
 
-**Monitoring strategy:**
+**Monitoring strategy (best → worst signal):**
 ```bash
-# Check if alive + working (non-intrusive)
-ps -p PID -o rss=,etime=,%cpu=
-# Check for file changes (non-intrusive)
-git diff --stat HEAD
-# Check for new commits
+# 1. BEST: check for uncommitted file changes (agent is actively writing)
+git status --short
+git diff --stat
+# 2. GOOD: check for new commits (agent completed a unit of work)
 git log --oneline -3
+# 3. LAST RESORT: check process is alive (tells you nothing about progress)
+ps -p PID -o rss=,etime=,%cpu=
 ```
+
+Prefer `git status` over process stats — file changes prove the agent is writing code, not just reading.
 
 **If you must intervene:** use `process action:log` first. If truly stuck, kill and respawn with a simpler prompt (fewer bugs per run).
 
