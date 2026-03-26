@@ -151,6 +151,49 @@ If a fix doesn't work, do NOT immediately try another approach. First: explain W
 
 - `claude --permission-mode bypassPermissions --print --model claude-opus-4-6`
 
+### Claude Code `--print` Mode — Do Not Kill Prematurely
+
+`claude --print` buffers ALL output until the task finishes. This means:
+
+- **No intermediate output is visible** — "no output yet" does NOT mean stuck
+- **15–20 min with no output is normal** for complex multi-file tasks (6+ bugs, reading many files)
+- **Memory growth is a GOOD sign** — rising RSS means it's actively working
+- **Git commits may appear late** — Claude Code often reads/plans extensively before writing
+
+**NEVER kill a Claude Code `--print` session just because it's "taking too long" without evidence of an actual hang.** Evidence of a real hang:
+- Process CPU at 0% for >5 minutes (check with `ps -p PID -o %cpu=`)
+- Memory stopped growing AND no file changes for >10 minutes
+- Process exited with error code
+
+**Monitoring strategy:**
+```bash
+# Check if alive + working (non-intrusive)
+ps -p PID -o rss=,etime=,%cpu=
+# Check for file changes (non-intrusive)
+git diff --stat HEAD
+# Check for new commits
+git log --oneline -3
+```
+
+**If you must intervene:** use `process action:log` first. If truly stuck, kill and respawn with a simpler prompt (fewer bugs per run).
+
+### Sub-Agent Timeout Sizing
+
+Sub-agents (via `sessions_spawn`) need enough time for their workload:
+
+| Task type | Recommended timeout | Notes |
+|-----------|-------------------|-------|
+| QA code review (5-10 files) | 10 min | Sonnet can do it in 2-5 min but needs buffer for gh pr comment |
+| QA with browser testing | 15 min | Browser automation is slow + flaky |
+| Feature implementation | 20-30 min | Complex multi-file changes |
+| Code review + fix cycle | 15 min | Read + analyze + write fixes |
+
+**Root cause of past timeouts:** Sonnet sub-agents spent all their time reading files via tool calls, leaving no time for the final `gh pr comment`. Solutions:
+1. Use Opus (faster per-turn throughput)
+2. Give 10 min minimum, even for "simple" reviews
+3. Split large reviews into smaller chunks (3-4 files per agent)
+4. For code-only reviews, explicitly say "no browser" to prevent wasted time
+
 ### Interactive QA Gate (Mandatory for UI Changes)
 
 After implementing UI changes, test EVERY interactive element before reporting done:
