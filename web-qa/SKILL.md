@@ -108,18 +108,51 @@ curl -sL -H "Authorization: Bearer $TOKEN" "$URL" -o /tmp/screenshot.png
 
 **Important:** Use `url_private` (not `url_private_download`) — the download variant returns 404 for some file types.
 
-**Attaching to GitHub Issues:** `gh` CLI doesn't support image upload in issue comments. Workarounds:
+**Uploading to GitHub via `bug-screenshots` branch:**
 
-1. **Link Slack public permalinks** (simplest — if the file has `permalink_public`):
-   ```bash
-   gh issue comment <N> --body "![screenshot](<slack-public-permalink-url>)"
-   ```
+`gh` CLI doesn't support image upload in issue comments. The solution: use an orphan `bug-screenshots` branch in the repo as persistent image hosting.
 
-2. **Upload via GitHub web UI** — drag-and-drop onto the issue in browser
+```bash
+# 1. Save current branch
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-3. **Reference by raw URL** — commit to a temp branch, link the raw GitHub URL, clean up after
+# 2. Switch to (or create) the orphan screenshots branch
+git checkout bug-screenshots 2>/dev/null || git checkout --orphan bug-screenshots
+git rm -rf . 2>/dev/null || true
 
-**Key point:** Screenshots and evidence live on the GitHub Issue. Never commit them to the source tree. This keeps the repo clean and the bug context self-contained.
+# 3. Copy screenshots with issue-prefixed names
+cp /tmp/screenshot.png "issue-<N>-<description>.png"
+
+# 4. Commit and push
+git add *.png
+git commit -m "bug screenshots for issue #<N>"
+git push origin bug-screenshots --force
+
+# 5. Return to working branch
+git checkout $CURRENT_BRANCH
+```
+
+Then embed in issue comments using raw GitHub URLs:
+```bash
+REPO="<owner>/<repo>"
+BASE="https://raw.githubusercontent.com/$REPO/bug-screenshots"
+gh issue comment <N> --repo $REPO \
+  --body "![issue-<N>-description]($BASE/issue-<N>-<description>.png)"
+```
+
+**Naming convention:** `issue-<N>-<short-description>.png` — so each screenshot is traceable to its bug.
+
+**Cleanup:** Delete the `bug-screenshots` branch after all issues are closed:
+```bash
+git push origin --delete bug-screenshots
+```
+
+**Screenshot accuracy guidance:** Match the RIGHT screenshot to the RIGHT issue. Before attaching:
+- Re-read the issue title
+- Confirm the screenshot actually shows the bug described in THAT issue
+- Don't attach a transition screenshot to a range-ring issue just because they came from the same Slack message
+
+**Key point:** Screenshots live on the `bug-screenshots` branch and are embedded in issues via raw URLs. Never commit them to feature branches or main. The branch is ephemeral — delete after all bugs are resolved.
 
 ### Linking Issues to PRs
 
