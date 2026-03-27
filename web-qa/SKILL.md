@@ -151,6 +151,7 @@ git push origin --delete bug-screenshots
 - Re-read the issue title
 - Confirm the screenshot actually shows the bug described in THAT issue
 - Don't attach a transition screenshot to a range-ring issue just because they came from the same Slack message
+- **If you're unsure which screenshot maps to which bug, confirm with the user before proceeding.** Don't guess from file order or auto-generated names.
 
 **Key point:** Screenshots live on the `bug-screenshots` branch and are embedded in issues via raw URLs. Never commit them to feature branches or main. The branch is ephemeral — delete after all bugs are resolved.
 
