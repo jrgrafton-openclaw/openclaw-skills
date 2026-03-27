@@ -221,9 +221,21 @@ For any `❌ FAILED` from the verify agent:
 5. Re-spawn a verify agent for just the re-fixed issues
 6. Repeat until all `✅ VERIFIED`
 
-## Step 6: Close
+## Step 6: Human Verification
 
-After ALL bugs are verified:
+After all bugs pass independent agent verification, prepare a **human verification checklist** for the user. For each bug, give them:
+
+1. **What to do** — exact steps to reproduce / navigate to the fix
+2. **What to look for** — the specific visual or behavioral change
+3. **What "fixed" looks like** — concrete acceptance criteria in human terms
+
+Post this checklist to the user (Slack/thread) and wait for their confirmation before closing issues.
+
+**Only proceed to Step 7 (Close) after the user confirms each bug is fixed.** Agent verification eliminates obvious regressions; human verification catches subtle visual/UX issues that automated checks miss.
+
+## Step 7: Close
+
+After ALL bugs are confirmed by the user:
 
 1. Close each issue — `gh issue close <N> --comment "Verified and closed. Fix: <SHA>"`
    - GitHub auto-closes if commit message had `fixes #N`, but verify it happened
