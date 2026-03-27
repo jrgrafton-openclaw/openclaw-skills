@@ -91,16 +91,33 @@ EOF
 
 ### Attaching Screenshots via CLI
 
-For screenshots from the user or captured by browser tool:
+**From Slack:** When the user reports bugs with screenshots in Slack, download them first:
 
 ```bash
-# Save screenshot to a temp file, then attach via gh
-gh issue comment <issue-number> --repo <owner/repo> \
-  --body "![screenshot](attachment)" \
-  -F screenshot.png
+# 1. Get the bot token
+TOKEN=$(grep SLACK_BOT_TOKEN ~/.openclaw/.env | cut -d= -f2)
+
+# 2. Get the private URL for a Slack file (file IDs are in the thread message metadata)
+URL=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  "https://slack.com/api/files.info?file=<FILE_ID>" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['file']['url_private'])")
+
+# 3. Download using the private URL (NOT the /download/ variant)
+curl -sL -H "Authorization: Bearer $TOKEN" "$URL" -o /tmp/screenshot.png
 ```
 
-Or include them in the initial `--body` by uploading first and referencing the GitHub-hosted URL.
+**Important:** Use `url_private` (not `url_private_download`) — the download variant returns 404 for some file types.
+
+**Attaching to GitHub Issues:** `gh` CLI doesn't support image upload in issue comments. Workarounds:
+
+1. **Link Slack public permalinks** (simplest — if the file has `permalink_public`):
+   ```bash
+   gh issue comment <N> --body "![screenshot](<slack-public-permalink-url>)"
+   ```
+
+2. **Upload via GitHub web UI** — drag-and-drop onto the issue in browser
+
+3. **Reference by raw URL** — commit to a temp branch, link the raw GitHub URL, clean up after
 
 **Key point:** Screenshots and evidence live on the GitHub Issue. Never commit them to the source tree. This keeps the repo clean and the bug context self-contained.
 
