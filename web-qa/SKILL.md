@@ -1,6 +1,6 @@
 ---
-name: bug-fix-web
-description: "Triage, fix, and verify bugs on web projects using GitHub Issues as the bug tracker. Use when: (1) user reports visual or functional bugs with screenshots, (2) PR review comments describe broken behavior, (3) bugs found on main/Pages/any branch need systematic fixing. Covers the full cycle: triage → GitHub Issue → fix agent → independent verify agent → close. Web-focused: uses browser tool, DOM queries, computed styles, SVG geometry for measurable verification. NOT for: test-only changes, non-web platforms (use platform-specific skills), or greenfield feature work."
+name: web-qa
+description: "End-to-end QA pipeline for web projects using GitHub Issues as the bug tracker. Use when: (1) user reports visual or functional bugs with screenshots, (2) PR review comments describe broken behavior, (3) bugs found on main/Pages/any branch need systematic fixing, (4) you need structured triage, investigation, and independent verification of web issues. Covers the full cycle: triage → GitHub Issue → fix agent → independent verify agent → close with evidence. Web-focused: uses browser tool, DOM queries, computed styles, SVG geometry for measurable verification. NOT for: test-only changes, non-web platforms (use platform-specific skills), or greenfield feature work."
 ---
 
 # Bug Fix — Web
