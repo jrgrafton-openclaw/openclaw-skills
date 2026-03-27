@@ -219,9 +219,24 @@ If you cannot test interactively (no browser access), explicitly LIST what needs
 2. **Change** — make the code change
 3. **After** — screenshot the new visual state
 4. **Compare** — confirm the difference matches intent
-5. **Only then** — commit
+5. **Measure** — turn subtle visual expectations into explicit checks whenever possible
+6. **Only then** — commit
 
 Never commit visual changes based solely on "the math looks right."
+
+For subtle visual bugs, prefer measurable checks over vague inspection. Examples:
+- expected center object is at viewport center
+- container left/right edges match viewport bounds
+- overlay/fade exists on both sides, not just one
+- phase-specific shading/opacity is non-zero when active and zero when inactive
+
+When direct inspection is too subtle, temporarily add **diagnostic exaggeration** during QA:
+- increase opacity/contrast/saturation of the suspect layer
+- swap subtle fades for loud colors temporarily
+- add outlines, guides, center lines, or bounding boxes
+- log geometry (`getBoundingClientRect`, computed opacity, transform values)
+
+Use these temporary exaggerations only to detect the bug faster; remove them before commit unless they are intentional debug tooling.
 
 ### Interactive Verification (Mandatory for Interactions)
 
