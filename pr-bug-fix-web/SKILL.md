@@ -1,21 +1,22 @@
 ---
-name: pr-bug-fix-web
-description: "Triage, fix, and verify bugs reported on web project PRs. Use when: (1) user reports visual or functional bugs with screenshots on an open PR, (2) PR review comments describe broken behavior in a web mockup/app, (3) you need to systematically fix multiple bugs on a feature branch with independent verification. Covers the full cycle: triage → structured bug report → fix agent → independent verify agent → cleanup. Web-focused: uses browser tool, DOM queries, computed styles, SVG geometry for measurable verification. NOT for: test-only changes, non-web platforms (use platform-specific skills), or greenfield feature work."
+name: bug-fix-web
+description: "Triage, fix, and verify bugs on web projects using GitHub Issues as the bug tracker. Use when: (1) user reports visual or functional bugs with screenshots, (2) PR review comments describe broken behavior, (3) bugs found on main/Pages/any branch need systematic fixing. Covers the full cycle: triage → GitHub Issue → fix agent → independent verify agent → close. Web-focused: uses browser tool, DOM queries, computed styles, SVG geometry for measurable verification. NOT for: test-only changes, non-web platforms (use platform-specific skills), or greenfield feature work."
 ---
 
-# PR Bug Fix — Web
+# Bug Fix — Web
 
-Structured workflow for fixing bugs reported on web project PRs. Each bug goes through: **Triage → Report → Fix → Verify → Cleanup**.
+Structured workflow for fixing web bugs using **GitHub Issues** as the single source of truth. Each bug goes through: **Triage → Issue → Fix → Verify → Close**.
 
 ## When This Triggers
 
-- User sends screenshots of broken behavior on a PR
-- GH review comments describe visual/functional regressions
-- Multiple bugs need systematic fixing on a feature branch
+- User sends screenshots of broken behavior (any branch, PR, or live Pages)
+- GH review comments describe visual/functional regressions on a PR
+- User reports a bug verbally (Slack, thread, DM) with or without screenshots
+- Multiple bugs need systematic fixing on any branch
 
 ## Step 1: Triage
 
-Read the user's bug reports (Slack messages, screenshots, GH comments). For each reported issue:
+Read the user's bug reports (Slack messages, screenshots, GH comments, verbal descriptions). For each reported issue:
 
 1. **Assess clarity.** If the bug report is ambiguous, uncertain, or missing critical info — **ask the user before proceeding.** Specifically ask when:
    - The screenshot doesn't clearly show what's wrong vs what's expected
@@ -32,102 +33,162 @@ Read the user's bug reports (Slack messages, screenshots, GH comments). For each
    - Identify the root cause at the **code-symbol level** (exact file, line, mechanism)
    - Define a **measurable acceptance check** (not "looks right" — a DOM query, computed style, geometry comparison, or element count that proves the fix)
 
-3. **Write the structured bug report.** Create `bug-reports/<pr-number>/bugs.md`:
+## Step 2: Create GitHub Issues
 
-```markdown
-# Bug Report — PR #<number>
+For each triaged bug, create a GitHub Issue with full context. **Attachments (screenshots, recordings) go directly on the issue** — never in the source tree or a side file.
 
-## BUG-1: <short description>
+### Issue Template
 
-**What's wrong:** <concrete, measurable description>
-**Screenshot:** `screenshots/<filename>.png`
-**Root cause:** <exact file, line, mechanism>
-**Acceptance check:** <measurable condition that proves it's fixed>
-**Fix approach:** <specific code change>
+```
+gh issue create \
+  --repo <owner/repo> \
+  --title "BUG: <short description>" \
+  --label bug \
+  --body "$(cat <<'EOF'
+## Context
+
+- **Source:** <where this was reported — PR #N / main branch / Pages / user report>
+- **Branch:** <branch name, e.g. main, feature/charge-phase>
+- **PR:** <#N if applicable, or "N/A">
+- **Commit:** <SHA if known, or "HEAD">
+- **URL:** <live URL if applicable, e.g. Pages link>
+- **Reported by:** <name or "automated">
+
+## Bug Description
+
+<concrete, measurable description of what's wrong>
+
+## Expected Behavior
+
+<what should happen instead>
+
+## Root Cause
+
+- **File:** `<exact file path>`
+- **Line/Symbol:** `<line number or function/class name>`
+- **Mechanism:** <why it's broken — the actual code-level explanation>
+
+## Acceptance Check
+
+<measurable condition that proves it's fixed — a JS expression, DOM query, computed style check, or element count>
+
+```js
+// Example: element should be centered
+const rect = document.querySelector('.target').getBoundingClientRect();
+Math.abs((rect.left + rect.width/2) - window.innerWidth/2) < 2; // true
 ```
 
-4. **Save user screenshots** to `bug-reports/<pr-number>/screenshots/`.
-5. **Commit + push** the bug report to the feature branch.
-6. **Comment on the PR** with a summary via `gh pr comment`.
+## Fix Approach
 
-## Step 2: Fix
+<specific code change needed>
+
+## Screenshots / Attachments
+
+<drag-and-drop screenshots directly here — they live on the issue, not in the repo>
+EOF
+)"
+```
+
+### Attaching Screenshots via CLI
+
+For screenshots from the user or captured by browser tool:
+
+```bash
+# Save screenshot to a temp file, then attach via gh
+gh issue comment <issue-number> --repo <owner/repo> \
+  --body "![screenshot](attachment)" \
+  -F screenshot.png
+```
+
+Or include them in the initial `--body` by uploading first and referencing the GitHub-hosted URL.
+
+**Key point:** Screenshots and evidence live on the GitHub Issue. Never commit them to the source tree. This keeps the repo clean and the bug context self-contained.
+
+### Linking Issues to PRs
+
+- If the bug is on a PR: mention `PR #N` in the Context section and comment on the PR linking to the issue
+- If the bug is on main: just reference the branch/commit
+- If the bug is from a user report: include the reproduction URL (Pages link, localhost port, etc.)
+
+## Step 3: Fix
 
 Spawn a sub-agent:
 
 ```
-task: "Read bug-reports/<pr>/bugs.md. Fix each bug per the
-acceptance checks. One conventional commit per bug:
-fix(scope): description (BUG-N). Push to <branch>."
+task: "Read these GitHub Issues: #X, #Y, #Z in <owner/repo>.
+Fix each bug per the acceptance checks. One conventional commit per bug:
+fix(scope): description (fixes #N). Push to <branch>.
+Comment the fix commit SHA on each issue."
 model: opus
 ```
 
 The fix agent, for each bug:
-1. Reads the bug entry from `bugs.md`
+1. Reads the issue (`gh issue view <N>`)
 2. Implements the fix approach
 3. Verifies locally against the acceptance check (measurable)
-4. Commits and pushes
+4. Commits with `fix(scope): description (fixes #<issue>)` — GitHub auto-links the commit
+5. Pushes to the target branch
+6. Comments on the issue with the commit SHA: `gh issue comment <N> --body "Fix committed: <SHA>"`
 
-## Step 3: Verify
+## Step 4: Verify
 
 Spawn a **separate** sub-agent — not the same one that fixed:
 
 ```
-task: "Read bug-reports/<pr>/bugs.md. For each bug, verify
-the fix using the EXACT acceptance check. Serve the app
-locally. Use browser tool for visual bugs. Report PASS or
-FAIL with measurable evidence per bug."
+task: "Verify fixes for GitHub Issues #X, #Y, #Z in <owner/repo>.
+For each issue, read the acceptance check, serve the app locally,
+and verify using browser tool. Comment PASS or FAIL with measurable
+evidence on each issue."
 model: opus
 ```
 
 The verify agent, for each bug:
-1. Serves the web app locally (`python3 -m http.server` or project dev server)
-2. Opens in browser, navigates to the bug's context
-3. Runs the measurable check:
+1. Reads the issue to get the acceptance check
+2. Serves the web app locally (`python3 -m http.server` or project dev server)
+3. Opens in browser, navigates to the bug's context
+4. Runs the measurable check:
    - DOM queries (`document.querySelectorAll('.class').length`)
    - Computed styles (`getComputedStyle(el).opacity`)
    - SVG geometry (`el.getBBox()`, `el.getScreenCTM()`)
    - Layout measurements (`el.getBoundingClientRect()`)
    - Element counts, class presence, attribute values
-4. For subtle visual issues: temporarily exaggerate the suspect feature (red outlines, high opacity, center guides) to confirm, then remove
-5. Reports `PASS` with evidence or `FAIL` with what's still wrong
+5. For subtle visual issues: temporarily exaggerate the suspect feature (red outlines, high opacity, center guides) to confirm, then remove
+6. Comments on the issue:
+   - `✅ VERIFIED` with evidence (exact values, screenshot if needed)
+   - or `❌ FAILED` with what's still wrong
 
-**Why a separate agent:** The fixer has confirmation bias. An independent verifier catches failures the fixer missed. This caught a real bug today (clipPath applied to wrong SVG element due to runtime reparenting).
+**Why a separate agent:** The fixer has confirmation bias. An independent verifier catches failures the fixer missed.
 
-## Step 4: Handle Failures
+## Step 5: Handle Failures
 
-For any `FAIL` from the verify agent:
+For any `❌ FAILED` from the verify agent:
 
-1. Read the failure evidence — the verify agent describes what's still wrong
+1. Read the failure comment on the issue
 2. Diagnose the real root cause (often different from the original hypothesis)
-3. Update `bugs.md` with the revised root cause
-4. Either fix directly (if small) or re-spawn a fix agent for just the failed bugs
-5. Re-spawn a verify agent for just the re-fixed bugs
-6. Repeat until all `PASS`
+3. Update the issue body with the revised root cause and fix approach
+4. Either fix directly (if small) or re-spawn a fix agent for just the failed issues
+5. Re-spawn a verify agent for just the re-fixed issues
+6. Repeat until all `✅ VERIFIED`
 
-## Step 5: Cleanup
+## Step 6: Close
 
-After ALL bugs are verified as `PASS`:
+After ALL bugs are verified:
 
-1. Mark each bug as `✅ VERIFIED` in `bugs.md`
-2. Remove the entire `bug-reports/<pr-number>/` directory
-3. Commit: `chore: remove resolved bug report artifacts`
-4. Push to the feature branch
-5. Update the PR description with final summary:
+1. Close each issue — `gh issue close <N> --comment "Verified and closed. Fix: <SHA>"`
+   - GitHub auto-closes if commit message had `fixes #N`, but verify it happened
+2. If bugs were from a PR, update the PR description with final summary:
 
 ```markdown
-## Bugs fixed
-- BUG-1: <description> — <commit hash>
-- BUG-2: <description> — <commit hash>
+## Bugs Fixed
+- #<issue>: <description> — <commit SHA>
+- #<issue>: <description> — <commit SHA>
 
 ## Verification
 - All bugs independently verified via browser automation
 - <specific evidence summary>
-
-## Risks
-- <any side effects or edge cases noted>
 ```
 
-6. Post result to user (Slack/thread)
+3. Post result to user (Slack/thread)
 
 ## Measurable Verification Patterns (Web)
 
@@ -148,9 +209,12 @@ When in doubt: **if you can't express the check as a JS expression that returns 
 
 ## Key Principles
 
+- **GitHub Issues are the bug tracker** — no markdown files, no `bug-reports/` directories
+- **Attachments live on issues** — screenshots, recordings, evidence — never in the source tree
+- **Any source, any branch** — works for PR reviews, main branch bugs, Pages bugs, user reports
 - **Don't guess when the bug report is unclear** — ask the user
-- **One bug per commit** — easy to revert, clean PR history
+- **One bug per issue, one bug per commit** — easy to track, easy to revert
 - **Fix and verify are always separate agents** — eliminates confirmation bias
 - **Measurable checks, not visual impression** — "looks fine" is not a check
-- **Exaggerate to detect** — temporarily make subtle features loud during QA
-- **Artifacts are ephemeral** — bug reports live on the branch during the fix cycle, get removed after all bugs are verified
+- **Agents update issues as they go** — investigating → fix committed → verified → closed
+- **Commit messages link to issues** — `fixes #N` for auto-close, SHA in comments for traceability
