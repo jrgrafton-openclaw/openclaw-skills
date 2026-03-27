@@ -163,10 +163,14 @@ git push origin --delete bug-screenshots
 
 ## Step 3: Fix
 
-Spawn a sub-agent:
+Spawn a sub-agent. **Always include the instruction to read this skill first:**
 
 ```
-task: "Read these GitHub Issues: #X, #Y, #Z in <owner/repo>.
+task: "FIRST: Read skills/web-qa/SKILL.md — follow its verification
+patterns, diagnostic exaggeration technique, and timeline instrumentation
+for animation bugs.
+
+Then read these GitHub Issues: #X, #Y, #Z in <owner/repo>.
 Fix each bug per the acceptance checks. One conventional commit per bug:
 fix(scope): description (fixes #N). Push to <branch>.
 Comment the fix commit SHA on each issue."
@@ -183,10 +187,14 @@ The fix agent, for each bug:
 
 ## Step 4: Verify
 
-Spawn a **separate** sub-agent — not the same one that fixed:
+Spawn a **separate** sub-agent — not the same one that fixed. **Always include the instruction to read this skill first:**
 
 ```
-task: "Verify fixes for GitHub Issues #X, #Y, #Z in <owner/repo>.
+task: "FIRST: Read skills/web-qa/SKILL.md — follow its verification
+patterns, diagnostic exaggeration technique, and timeline instrumentation
+for animation bugs.
+
+Verify fixes for GitHub Issues #X, #Y, #Z in <owner/repo>.
 For each issue, read the acceptance check, serve the app locally,
 and verify using browser tool. Comment PASS or FAIL with measurable
 evidence on each issue."
@@ -267,6 +275,59 @@ Common checks by bug type:
 | Layout shift | Capture `gridTemplateColumns` over time during animation |
 | Zone shading missing | `getComputedStyle(zoneEl).opacity !== '0'` in active phase |
 | Font overflow | `text.getBBox().width <= container.getBBox().width` |
+| Animation/transition bug | Instrument with interval timer (see below) |
+
+### Animation / Transition Timeline Instrumentation
+
+For any bug involving animations, transitions, or time-based state changes, a single screenshot is **not sufficient**. Use interval-based timeline capture:
+
+```js
+// Inject before triggering the action:
+window._timeline = [];
+const props = ['opacity', 'transform']; // add whatever matters
+const targets = {
+  header: document.querySelector('.header'),
+  inner: document.getElementById('inner-element'),
+};
+const interval = setInterval(() => {
+  const entry = { t: performance.now() };
+  for (const [name, el] of Object.entries(targets)) {
+    if (!el) continue;
+    const cs = getComputedStyle(el);
+    entry[name + 'Opacity'] = cs.opacity;
+    entry[name + 'Transform'] = cs.transform;
+  }
+  entry.bodyClass = document.body.className;
+  window._timeline.push(entry);
+}, 100); // 100ms = 10fps capture
+
+// Stop after the animation window:
+setTimeout(() => clearInterval(interval), 4000);
+
+// Trigger the action, then read back:
+// ... after 4s ...
+console.log(JSON.stringify(window._timeline, null, 2));
+```
+
+Analyze the timeline to find the exact frame where values jump unexpectedly. This catches:
+- Opacity snapping to 0 instead of transitioning (animation fill mode issues)
+- Transform jumping between frames (camera position overwritten during lerp)
+- CSS class changes happening at the wrong time
+- Layout shifts from grid/flex reflow
+
+**This technique found the forge→game transition bug:** the timeline showed header opacity going from 1→0 in a single frame (animation fill removed) and camera starting at deploy position instead of forge position (pre-init overwrote it).
+
+### Diagnostic Visual Exaggeration
+
+When verifying subtle visual bugs (clipping, alignment, fades, overlays), temporarily exaggerate the suspect feature to make defects impossible to miss:
+
+- **Swap subtle colors for loud ones:** `element.style.fill = 'rgba(255,0,0,0.5)'`
+- **Add visible boundary markers:** draw a `<rect>` at the expected clip boundary with `stroke: lime; stroke-width: 5`
+- **Increase opacity/contrast:** crank suspect overlays to `opacity: 1` temporarily
+- **Add center guides:** draw crosshair lines at expected center points
+- **Log geometry:** `console.log(el.getBBox(), el.getBoundingClientRect())`
+
+Always remove diagnostic modifications before committing. They are QA tools, not production code.
 
 When in doubt: **if you can't express the check as a JS expression that returns true/false, you haven't defined it precisely enough.**
 
