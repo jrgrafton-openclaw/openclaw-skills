@@ -202,3 +202,69 @@ Each phase has:
 - A scene-registry config registered via `registerScene('<phase>', { ... })`
 - A body class: `phase-<phase>`
 - Cleanup runs on exit, init runs on entry (via `transitionTo()`)
+
+## 10. Architectural Best Practices (Hard-Won Lessons)
+
+These rules come from real multi-hour debugging sessions. Violating any of them has historically led to 6+ hour fix cycles with 20+ wasted commits.
+
+### 10.1 No `setTimeout` Cascades — Use Deterministic Callbacks
+- **NEVER** chain `setTimeout` calls to sequence visual transitions. They drift, they're untestable, and they break when frame rates change.
+- **DO:** Use CSS `animation-delay` for sequenced animations, `animationend`/`transitionend` events for callbacks, or `requestAnimationFrame` for frame-precise work.
+- **Example of what went wrong:** `transition.js` had 4 nested `setTimeout` calls at hardcoded delays (200ms, 400ms, 600ms, 1000ms) to orchestrate the forge→game handoff. Result: timing-dependent visual glitches that reproduced intermittently.
+- **The fix:** CSS `animation-delay` on each element + a single `animationend` listener on the last element in the sequence.
+
+### 10.2 Shared Abstractions Between Phases and Components
+- **ALWAYS** look for existing patterns before writing new code. If two phases do similar things (drag, selection, range display, zone rendering), extract the shared behavior.
+- **Specific rule:** The debug menu, the forge, and the game MUST use the same code paths for deployment type switching, objective rendering, and zone management. The forge's deployment type switcher must call the SAME functions as the debug menu's — not a "simplified version."
+- **What went wrong:** Forge had its own zone-clearing logic that was subtly different from the debug menu's. Result: objectives disappeared on deployment type switch in forge but not in debug.
+- **Phase CSS:** Don't copy-paste phase-specific CSS. Use a shared class (e.g. `.phase-post-deploy`) that all post-deploy phases share, instead of writing identical rules for `.phase-move`, `.phase-shoot`, `.phase-charge`, `.phase-fight`, `.phase-game-end`.
+- **Editor + Game sharing:** Map rendering, zone rendering, terrain loading — these should be shared modules importable by both the level editor and the game. Don't maintain two implementations.
+
+### 10.3 File Organization — Think Before Creating
+Before creating a new file:
+1. **Group by responsibility, not by type.** Don't dump all JS into one flat folder. Group into `core/` (state, config, game-state-bridge), `map/` (zone-renderer, layer-order, collision), `scenes/` (per-phase logic), `debug/` (debug menu, shortcuts), `css/` (component stylesheets).
+2. **Check for an existing home.** Would this code fit better as a function in an existing module?
+3. **Keep files under 400 lines.** If a file exceeds this, split it by responsibility. `deployment.js` at 1,274 lines was a god-file that owned deploy state, deploy UI, deploy drag, deploy validation, and cleanup — 5+ responsibilities in one file.
+4. **CSS components:** Split CSS by component/concern (layout, phases, deploy, forge, fx, debug) rather than one monolithic `style.css`.
+5. **ES modules over IIFEs.** All new code should be ES modules with explicit imports/exports. No `window.__` globals for cross-module communication — use proper imports.
+
+### 10.4 Import Path Discipline
+- **Static imports at the top** of the file set the baseline. If the file is in `v0.5/core/`, the path to `shared/` is `../../../shared/`.
+- **Dynamic imports must use the same path depth** as static imports in the same file. The bug from PR #69: static imports used `../../../shared/` (correct) but a dynamic `import()` used `../../shared/` (wrong — resolves to `integrated/shared/` instead of `mockups/shared/`).
+- **Rule:** After adding any dynamic import, verify its resolved path matches the static imports.
+
+### 10.5 Don't Guess — Trace the Full Path
+When debugging a visual issue:
+1. **Start from the user-visible symptom** (what's wrong on screen).
+2. **Trace the render path backward:** What function renders this element? What state drives it? What event triggers the state change?
+3. **Never fix symptoms.** If range rings leak past the board, don't just add `overflow:hidden` — understand which SVG they're in, whether `layer-order.js` reparented them, and whether the clipPath moved with them.
+4. **Verify your mental model** by logging or breakpointing at each step in the chain before writing a fix.
+
+### 10.6 Render-Then-Reparent Is Not Optional
+This pattern is the single most critical architectural constraint in the rendering layer:
+1. `renderModels()` recreates all elements in `#layer-models`
+2. Callbacks fire AFTER render
+3. Reparenting happens in callbacks
+
+Moving elements BEFORE render creates duplicates. This mistake has been made 3 times across different agents. See Section 1 for the full lifecycle.
+
+### 10.7 Visual Verification Is Not DOM Querying
+- DOM queries prove code was written. Screenshots prove it renders.
+- Element count checks (drag-models vs layer-models) prove reparenting works.
+- Computed style checks (opacity, transform, visibility) prove CSS applies.
+- Timeline captures (sampling computed styles every 100ms) prove animations run.
+- **Temporary diagnostic exaggeration:** When checking subtle visual states, temporarily set `outline: 3px solid red` or `opacity: 1 !important` on suspect elements, capture proof, then remove. This catches low-contrast/subtle defects that screenshots alone miss.
+
+### 10.8 One Bug at a Time
+Fix → verify on GH Pages or local server → confirm with screenshot/proof → THEN move to next bug. Do not batch fixes and hope they all work. Every unverified fix creates compound debugging when something breaks.
+
+### 10.9 CSS Grid Animation Constraints
+- CSS **cannot interpolate** between different grid track counts (`1fr` ↔ `220px 1fr`).
+- To animate a sidebar appearing: use the SAME track structure with `0px` width (e.g. `0px 1fr` → `220px 1fr`).
+- `display:none` elements cannot be animated into. JS-driven opacity after layout transition completes.
+
+### 10.10 Cache Busting
+- ES modules are aggressively cached by browsers.
+- Append `?v=<timestamp>` to URLs when testing changes locally.
+- Update the cache-buster param in `index.html` script tags before deploying.
+- **Verify new code is loaded:** Add a temporary `console.log('v2 loaded')` marker and check the console before trusting browser behavior. Wasted 30+ minutes once because old code was running despite file edits.
