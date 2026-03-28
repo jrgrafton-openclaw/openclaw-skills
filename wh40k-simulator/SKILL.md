@@ -1,9 +1,9 @@
 ---
 name: wh40k-simulator
-description: "WH40K Simulator project conventions: rendering architecture, visual bug fixing, browser verification, debug menu usage, and deployment pipeline. Use when: (1) fixing any visual/UI bug in the WH40K simulator, (2) modifying drag, rendering, or SVG layer code, (3) working on the integrated v0.5 mockup, (4) any task touching packages/ui/public/mockups/. NOT for: engine-only changes (pure TypeScript, no rendering), content/army data changes, or AI evaluator work."
+description: "WH40K Simulator project conventions: rendering architecture, visual bug fixing, browser verification, debug menu usage, engine contracts, and deployment pipeline. Use when working on ANY task in the warhammer-40k-simulator repo — engine, content, AI, UI, mockups, map editor, or CI. Covers: (1) visual/UI bugs and drag/rendering/SVG layer work, (2) engine rules and test conventions, (3) integrated v0.5 mockup architecture, (4) deploy pipeline and verification patterns, (5) sub-agent task descriptions for this project."
 ---
 
-# WH40K Simulator — UI & Visual Bug Conventions
+# WH40K Simulator — Project Conventions
 
 ## Project Location
 - **Repo:** `jrgrafton-openclaw/warhammer-40k-simulator`
@@ -127,11 +127,45 @@ The in-game debug panel (top-right **⚙ Debug** toggle) also has phase skip but
 - Check CI: `gh run list --repo jrgrafton-openclaw/warhammer-40k-simulator --limit 3`
 - Version banner in console: `[v0.5] commit=<hash> built=<timestamp>`
 
-## 6. Test Commands
+## 6. Engine & Content Conventions
+
+### Read AGENTS.md First
+The project `AGENTS.md` at the repo root defines architecture contracts, dependency direction, extension points, and test conventions. **Read it before any task.** This skill supplements it with hard-won operational knowledge.
+
+### Architecture Contracts (from AGENTS.md)
+- **Engine has NO external deps.** Works in Node, Deno, browsers.
+- **State is immutable from outside.** `engine.getState()` returns a deep clone. Mutate only via `engine.dispatch(action)`.
+- **ALL randomness via `SeededRng`.** Never `Math.random()` in engine/content/ai.
+- **Dependency direction:** engine ← content ← ai ← ui (never import upstream)
+
+### Test Commands
 ```bash
 cd /Users/familybot/.openclaw/workspace/projects/wh40k-v05
-pnpm test              # 227 engine/content tests (no UI rendering tests)
+pnpm test              # 227 engine/content tests (Vitest, no UI rendering tests)
 pnpm test -- --watch   # Watch mode
 ```
 
-There are NO automated tests for the rendering layer. All visual verification must be done in-browser.
+### Test Fixtures
+- **Custodes 1985pt army:** `packages/content/src/__tests__/fixtures/custodes-test-army.json`
+- Use real fixtures for integration testing — don't test with empty/minimal state
+
+### Golden Transcript Tests
+Fixed seed → deterministic hash. If you change the pipeline (resolver order, dice logic, ability effects), the hash changes. Update the hash in the test AND explain why in the commit message.
+
+## 7. Worktree Policy
+For any non-trivial change, use a git worktree:
+```bash
+cd /Users/familybot/.openclaw/workspace/projects/wh40k-v05
+git worktree add /private/tmp/wh40k-<feature> -b <branch> feat/integrated-v0.5
+```
+The main worktree at `projects/wh40k-v05` tracks `feat/integrated-v0.5`. Cherry-pick from worktree branches back to it when ready.
+
+## 8. Sub-Agent Task Descriptions
+When spawning sub-agents for WH40K work, include:
+- The rendering architecture summary (Section 1) for any UI task
+- The render-then-reparent rule for any drag/layer work
+- Debug menu instructions for visual verification
+- The exact browser verification steps (Section 3)
+- `pnpm test` must pass before committing
+
+There are NO automated tests for the rendering layer. All visual verification must be done in-browser using the debug menu.
