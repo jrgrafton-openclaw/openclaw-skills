@@ -29,15 +29,25 @@ description: "WH40K Simulator project conventions: rendering architecture, visua
 ### SVG Layer Stack (bottom to top)
 ```
 #battlefield-inner
-  ├── #bf-svg-terrain    (SVG, viewBox 0 0 720 528)
+  ├── #bf-svg-terrain    (SVG, overflow:VISIBLE, viewBox 0 0 720 528)
   │     ├── terrain sprites, zone rects
   │     ├── #layer-models    (model groups live HERE after layer-order.js)
   │     └── #layer-hulls     (unit hull paths)
-  ├── #bf-svg-vignette   (SVG, z-index: 8, edge vignette + zone vignettes)
-  └── #bf-svg-drag       (SVG, z-index: 9, overflow:visible, pointer-events:none)
+  ├── #bf-svg            (SVG, overflow:HIDDEN, viewBox 0 0 720 528)
+  │     ├── #layer-move-ghosts, #layer-debug-grid, etc.
+  │     └── #layer-range-rings   (legacy, unused in integrated — rings go to bf-svg-range)
+  ├── #bf-svg-range      (SVG, z-index:7, overflow:HIDDEN, pointer-events:none)
+  │     └── range ring <circle> elements drawn by range-rings.js
+  ├── #bf-svg-vignette   (SVG, z-index:8, edge vignette + zone vignettes)
+  └── #bf-svg-drag       (SVG, z-index:9, overflow:visible, pointer-events:none)
         ├── #drag-hulls    (hull paths during drag)
         └── #drag-models   (model groups during drag)
 ```
+
+**Overflow rules matter:**
+- `overflow:hidden` = clips at viewBox boundary (720×528). Used for range rings, board clip.
+- `overflow:visible` = renders past viewBox. Used for terrain (edge effects) and drag (models near edges).
+- Moving elements between SVGs with different overflow rules changes clipping behavior — this was the root cause of bugs #52 and #53.
 
 ### Key Facts
 - **Board dimensions:** 720×528 px (playable area)
