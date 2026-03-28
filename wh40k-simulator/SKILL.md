@@ -1,0 +1,137 @@
+---
+name: wh40k-simulator
+description: "WH40K Simulator project conventions: rendering architecture, visual bug fixing, browser verification, debug menu usage, and deployment pipeline. Use when: (1) fixing any visual/UI bug in the WH40K simulator, (2) modifying drag, rendering, or SVG layer code, (3) working on the integrated v0.5 mockup, (4) any task touching packages/ui/public/mockups/. NOT for: engine-only changes (pure TypeScript, no rendering), content/army data changes, or AI evaluator work."
+---
+
+# WH40K Simulator — UI & Visual Bug Conventions
+
+## Project Location
+- **Repo:** `jrgrafton-openclaw/warhammer-40k-simulator`
+- **Main worktree:** `/Users/familybot/.openclaw/workspace/projects/wh40k-v05` (branch `feat/integrated-v0.5`)
+- **PR:** #50 on `feat/integrated-v0.5`
+- **Live preview:** `https://jrgrafton-openclaw.github.io/warhammer-40k-simulator/preview/pr-50/mockups/integrated/v0.5/`
+- **Project AGENTS.md:** Read it first for architecture contracts and repo structure.
+
+## 1. Rendering Architecture (v0.5 Integrated Mockup)
+
+### SVG Layer Stack (bottom to top)
+```
+#battlefield-inner
+  ├── #bf-svg-terrain    (SVG, viewBox 0 0 720 528)
+  │     ├── terrain sprites, zone rects
+  │     ├── #layer-models    (model groups live HERE after layer-order.js)
+  │     └── #layer-hulls     (unit hull paths)
+  ├── #bf-svg-vignette   (SVG, z-index: 8, edge vignette + zone vignettes)
+  └── #bf-svg-drag       (SVG, z-index: 9, overflow:visible, pointer-events:none)
+        ├── #drag-hulls    (hull paths during drag)
+        └── #drag-models   (model groups during drag)
+```
+
+### Key Facts
+- **Board dimensions:** 720×528 px (playable area)
+- **`layer-order.js`** runs once at map load — reparents some model `<g>` elements from `#bf-svg` to `#bf-svg-terrain` for z-interleaving with terrain sprites
+- **`renderModels()`** (in `model-renderer.js`) always creates elements in `#layer-models`. It does NOT know about layer-order reparenting.
+- **`#layer-models` is INSIDE `#bf-svg-terrain`** (not a separate SVG)
+
+### Render-Then-Reparent Pattern (CRITICAL)
+The **only correct way** to lift elements above the vignette during drag:
+
+1. `renderModels()` recreates all model groups fresh in `#layer-models`
+2. `callbacks.afterRender` (per-phase) or `callbacks.afterRenderPersistent` (cross-phase) fires
+3. Reparent function clears `#drag-hulls` + `#drag-models` first, then moves freshly-rendered elements there
+
+**NEVER move elements before render.** `renderModels()` recreates everything — pre-render moves create duplicates (one in drag layer from before, one freshly created in layer-models).
+
+### Callback Lifecycle
+| Callback | Set by | Cleared by | Survives phase transitions? |
+|----------|--------|------------|---------------------------|
+| `callbacks.afterRender` | Each scene (deploy, move, shoot, etc.) | `scene-registry.js transitionTo()` | ❌ No |
+| `callbacks.afterRenderPersistent` | `svg-renderer.js initModelInteraction()` | Never cleared | ✅ Yes |
+| `callbacks.selectUnit` | Each scene | `scene-registry.js transitionTo()` | ❌ No |
+| `callbacks.updateRangeCircles` | `svg-renderer.js` module init | Never cleared | ✅ Yes |
+
+### Deploy Phase Drag (Special Case)
+Deploy has its **own** drag reparenting in `deployment.js`:
+- Uses `deployState.placingUnit` (not `simState.drag`) to determine which unit to reparent
+- Registers its reparent via `callbacks.afterRender`
+- Has a `defineProperty` interceptor on `simState.drag` for blocking enemy drags and calling `startPlacement()`
+- `cleanupDeployment()` removes the interceptor (restores plain property)
+
+**Rule:** `svg-renderer.js`'s `_reparentDraggedUnit()` must skip during deploy (`phase-deploy` body class check). Deploy owns its own reparenting.
+
+## 2. Board Boundary Clamping
+
+### `_clampUnitToBoard(unit)` in `svg-renderer.js`
+- **PAD = 10** (matches deploy's `_clampToZone`)
+- Cohesive shift: computes max overshoot per edge, applies single dx/dy to ALL models (preserves hull shape, no collapse)
+- **Offboard exemption:** Only skip clamping when `!simState.drag` AND any model has `x < 0`. During active drag, ALWAYS clamp — prevents units escaping past the left edge.
+- Fires on every `mousemove` + safety-net on `mouseup` for all drag types (unit, model, rotate)
+
+## 3. Visual Bug Verification (MANDATORY)
+
+### Debug Menu — Fast Phase Testing
+The start screen has a debug panel:
+1. Click **⚙ Debug** button (bottom of start screen)
+2. Click **→ Deploy**, **→ Move**, **→ Shoot**, etc. to skip directly to that phase
+3. Units are auto-deployed, positioned appropriately for the target phase
+
+The in-game debug panel (top-right **⚙ Debug** toggle) also has phase skip buttons + overlay toggles.
+
+### Browser Verification Steps
+1. **Serve locally:** `cd packages/ui/public && python3 -m http.server 8767`
+2. **Open browser:** `browser(action="open", url="http://localhost:8767/mockups/integrated/v0.5/")`
+3. **Cache busting:** Append `?v=N` to URL when changing JS files (ES modules are aggressively cached)
+4. **Skip to phase:** Use debug menu buttons or JS: `import('./scene-registry.js').then(sr => sr.transitionTo('move'))`
+5. **Programmatic drag test:**
+   ```js
+   // Find hull element
+   const hull = document.querySelector('.unit-hull[data-unit-id="<unit-id>"]');
+   const rect = hull.getBoundingClientRect();
+   // Mousedown
+   hull.dispatchEvent(new MouseEvent('mousedown', { clientX: rect.x+10, clientY: rect.y+10, bubbles: true }));
+   // Mousemove (multiple steps for smooth drag)
+   window.dispatchEvent(new MouseEvent('mousemove', { clientX: targetX, clientY: targetY, bubbles: true }));
+   // Check state
+   const dragModels = document.getElementById('drag-models');
+   const layerModels = document.getElementById('layer-models');
+   console.log('in drag:', dragModels.querySelectorAll('g[data-unit-id="..."]').length);
+   console.log('in layer:', layerModels.querySelectorAll('g[data-unit-id="..."]').length);
+   // Mouseup
+   window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+   ```
+6. **Verify element counts:** During drag: N in drag-models, 0 in layer-models. After drop: 0 in drag-models, N back in layer-models.
+
+### What "Verified" Means
+- ❌ DOM query shows attribute exists → NOT verified (proves code was written, not that it renders)
+- ❌ Reading source code and concluding it should work → NOT verified
+- ✅ Screenshot showing the visual state → verified
+- ✅ Element count check during drag (drag-models vs layer-models) → verified
+- ✅ Coordinate check after drag (all within 0-720, 0-528) → verified
+
+## 4. Common Pitfalls
+
+| Pitfall | Why it fails | Prevention |
+|---------|-------------|------------|
+| Moving elements before `renderModels()` | `renderModels()` recreates all elements → duplicates | Always use afterRender/afterRenderPersistent callback |
+| `if (m.x < 0) skip clamp` during drag | Models cross x=0 during drag → clamp disables | Gate offboard skip with `!simState.drag` |
+| Deploy's `defineProperty` interceptor leaking | Persists after deploy cleanup → blocks ork drag, calls `startPlacement()` in wrong phase | `cleanupDeployment()` must `delete simState.drag; simState.drag = currentDrag;` |
+| `callbacks.afterRender` cleared on phase transition | Scene-registry nulls it in `transitionTo()` | Use `afterRenderPersistent` for cross-phase behavior |
+| Browser caching ES modules | Old code runs despite file changes | Append `?v=N` to URL for cache bust |
+| SVG `clipPath` across reparented elements | `clipPath` in `#bf-svg` doesn't clip elements reparented to `#bf-svg-terrain` | Use arc paths or HTML overlay instead of cross-SVG clipPath |
+
+## 5. Deploy Pipeline
+
+- CI runs on push to `feat/integrated-v0.5` (or any PR branch)
+- Deploys preview to `preview/pr-50/` on `gh-pages`
+- **NEVER commit directly to `gh-pages`** — CI rebuilds it
+- Check CI: `gh run list --repo jrgrafton-openclaw/warhammer-40k-simulator --limit 3`
+- Version banner in console: `[v0.5] commit=<hash> built=<timestamp>`
+
+## 6. Test Commands
+```bash
+cd /Users/familybot/.openclaw/workspace/projects/wh40k-v05
+pnpm test              # 227 engine/content tests (no UI rendering tests)
+pnpm test -- --watch   # Watch mode
+```
+
+There are NO automated tests for the rendering layer. All visual verification must be done in-browser.
