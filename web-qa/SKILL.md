@@ -342,6 +342,21 @@ When testing locally:
 3. **Verify the new code is running** — add a temporary `console.log('v2')` at the top of the changed file, reload, check it appears in console. If it doesn't, you're still running cached code.
 4. **Never trust "the DOM looks right" without confirming the latest code is loaded** — this wasted 30+ minutes in the range-ring clipping investigation
 
+**For static-hosted sites (GitHub Pages, Netlify, etc.):**
+Every fix commit MUST include cache-bust params on the changed module's import paths. ES module imports are cached aggressively by CDNs and browsers — even hard refresh doesn't always work.
+
+```js
+// BEFORE (cached forever):
+import { draw } from '../../shared/world/range-rings.js';
+
+// AFTER (cache-busted):
+import { draw } from '../../shared/world/range-rings.js?v=1774659627';
+```
+
+Do this for EVERY file that imports the changed module. Use a Unix timestamp (`date +%s`) as the version. This is not optional — without it, users (including the person verifying the fix) will see old behavior and waste time debugging a non-issue.
+
+**Remove the cache-bust params** in a cleanup commit before merging to main — they're a deployment workaround, not permanent code.
+
 When in doubt: **if you can't express the check as a JS expression that returns true/false, you haven't defined it precisely enough.**
 
 ## Key Principles
