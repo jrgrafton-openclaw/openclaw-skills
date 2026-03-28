@@ -300,7 +300,7 @@ There are NO automated tests for the rendering layer. All visual verification mu
 ## 9. Game Phases
 > **Update this list** when new phases are added or renamed.
 
-Current phases (in order): `deploy` → `move` → `shoot` → `charge` → `fight` → `game-end`
+Current phases (in order): `deploy` → `command` → `move` → `shoot` → `charge` → `fight` → `game-end`
 
 Each phase has:
 - A scene file: `scenes/scene-<phase>.js`
