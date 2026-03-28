@@ -329,6 +329,19 @@ When verifying subtle visual bugs (clipping, alignment, fades, overlays), tempor
 
 Always remove diagnostic modifications before committing. They are QA tools, not production code.
 
+### Cache Busting During Local QA
+
+**ES module caching will silently serve old code** — even after editing files, even after `location.reload(true)`. This is the #1 cause of "I verified the fix but it's not actually running."
+
+When testing locally:
+1. **Use a dev server with no-cache headers** (Vite, webpack-dev-server) instead of `python3 -m http.server`
+2. **If you must use a static server**, bust the module cache by:
+   - Closing the tab completely and opening a fresh one (new tab, not just refresh)
+   - Or appending `?v=<timestamp>` to the HTML URL
+   - Or using Chrome DevTools → Network → "Disable cache" checkbox (only works with DevTools open)
+3. **Verify the new code is running** — add a temporary `console.log('v2')` at the top of the changed file, reload, check it appears in console. If it doesn't, you're still running cached code.
+4. **Never trust "the DOM looks right" without confirming the latest code is loaded** — this wasted 30+ minutes in the range-ring clipping investigation
+
 When in doubt: **if you can't express the check as a JS expression that returns true/false, you haven't defined it precisely enough.**
 
 ## Key Principles
