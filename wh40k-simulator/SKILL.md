@@ -91,37 +91,142 @@ Deploy has its **own** drag reparenting in `deployment.js`:
 - **Offboard exemption:** Only skip clamping when `!simState.drag` AND any model has `x < 0`. During active drag, ALWAYS clamp — prevents units escaping past the left edge.
 - Fires on every `mousemove` + safety-net on `mouseup` for all drag types (unit, model, rotate)
 
-## 3. Visual Bug Verification (MANDATORY)
+## 3. Testing & Browser Verification (MANDATORY)
 
-### Debug Menu — Fast Phase Testing
-The start screen has a debug panel:
-1. Click **⚙ Debug** button (bottom of start screen)
-2. Click **→ Deploy**, **→ Move**, **→ Shoot**, etc. to skip directly to that phase
-3. Units are auto-deployed, positioned appropriately for the target phase
+### 3.1 Serving the App Locally
+```bash
+# From the repo root:
+cd packages/ui/public && python3 -m http.server 8767 --bind 127.0.0.1
 
-The in-game debug panel (top-right **⚙ Debug** toggle) also has phase skip buttons + overlay toggles.
+# Mockup URL (with map pre-loaded for debug shortcuts):
+# http://127.0.0.1:8767/mockups/integrated/v0.5/index.html?map=745eebf0-f180-47b5-a14d-b68344db0320
 
-**Always use the debug menu for visual testing.** It's dramatically faster than clicking through the full game setup.
+# Without ?map= : starts at real start screen (useful for full-flow QA)
+# With ?map=<uuid> : pre-loads that map from Supabase (required for debug phase skips)
+```
 
-### Browser Verification Steps
-1. **Serve locally:** `cd packages/ui/public && python3 -m http.server 8767`
-2. **Open browser:** `browser(action="open", url="http://localhost:8767/mockups/integrated/v0.5/")`
-3. **Cache busting:** Append `?v=N` to URL when changing JS files (ES modules are aggressively cached)
-4. **Skip to phase:** Use debug menu buttons or JS: `import('./scene-registry.js').then(sr => sr.transitionTo('move'))`
-5. **Programmatic drag test:**
-   ```js
-   const hull = document.querySelector('.unit-hull[data-unit-id="<unit-id>"]');
-   const rect = hull.getBoundingClientRect();
-   hull.dispatchEvent(new MouseEvent('mousedown', { clientX: rect.x+10, clientY: rect.y+10, bubbles: true }));
-   window.dispatchEvent(new MouseEvent('mousemove', { clientX: targetX, clientY: targetY, bubbles: true }));
-   // Check element counts
-   document.getElementById('drag-models').querySelectorAll('g[data-unit-id="..."]').length;  // should be N during drag
-   document.getElementById('layer-models').querySelectorAll('g[data-unit-id="..."]').length;  // should be 0 during drag
-   window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-   ```
-6. **Verify element counts:** During drag: N in drag-models, 0 in layer-models. After drop: 0 in drag-models, N back in layer-models.
+**GH Pages live URL:** `https://jrgrafton-openclaw.github.io/warhammer-40k-simulator/mockups/integrated/v0.5/index.html`
+**PR preview URL pattern:** `https://jrgrafton-openclaw.github.io/warhammer-40k-simulator/preview/pr-<N>/mockups/integrated/v0.5/index.html`
 
-### What "Verified" Means
+### 3.2 The Audio Gate (First Thing You See)
+The app starts with a full-screen "Click to Enter" gate (`#enter-gate`). This is an audio context gate required by browsers.
+
+**How to dismiss it (browser automation):**
+```js
+// Method 1: Playwright-style click (preferred)
+browser(action="act", kind="click", selector="#enter-gate")
+
+// Method 2: If click doesn't work (gate not visible to Playwright):
+browser(action="act", kind="evaluate",
+  fn="() => { document.getElementById('enter-gate').click(); return 'ok'; }")
+```
+
+**After dismissing:** Wait 4-5 seconds for the start screen boot animation (title stamp, particles, menu fade-in).
+
+### 3.3 The Start Screen → Battle Forge → Game Flow
+The full UI flow is: **Gate → Start Screen → Battle Forge → Game (Deploy → Move → Shoot → Charge → Fight → Game End)**
+
+| Screen | Key elements | How to reach |
+|--------|-------------|-------------|
+| **Start Screen** | "New Game", "Load Game", "Settings" buttons + title animation | Dismiss gate |
+| **Battle Forge** | Faction pickers, map dropdown, deployment type grid, "BEGIN BATTLE" button | Click "New Game" |
+| **Deploy** | Board with terrain, roster sidebar, deployment zones, "CONFIRM DEPLOYMENT" | Click "BEGIN BATTLE" (needs factions selected) OR debug skip |
+| **Move** | Action bar: "NORMAL MOVE", "ADVANCE", "END MOVEMENT" | Complete deploy OR debug skip |
+| **Shoot** | Shooting action bar | Complete move OR debug skip |
+| **Charge** | Charge action bar | Complete shoot OR debug skip |
+| **Fight** | Fight action bar | Complete charge OR debug skip |
+| **Game End** | Victory/defeat overlay, "PLAY AGAIN" button | Complete fight OR debug skip |
+
+### 3.4 Debug Menu — Fast Phase Testing (USE THIS)
+The debug menu is the fastest way to test individual phases without clicking through the full game flow.
+
+**How to access:**
+```js
+// Show the debug menu (it starts hidden):
+browser(action="act", kind="evaluate",
+  fn="() => { document.querySelector('.debug-menu').style.display = 'block'; return 'shown'; }")
+```
+
+**Debug menu buttons:**
+- `RESET` / `RESET MIN/MAX` — reset unit positions
+- `⚡ AUTO DEPLOY ALL` — auto-deploy all units to valid positions
+- **`→ Deploy`** — skip to deploy phase (loads map if needed)
+- **`→ Move`** — skip to move phase (auto-deploys units first)
+- **`→ Shoot`** — skip to shoot phase
+- **`→ Charge`** — skip to charge phase
+- **`→ Fight`** — skip to fight phase
+- **`→ Game end`** — skip to game end phase
+- `SAVE CONFIG` — save debug config
+
+**Clicking a phase skip button via JS:**
+```js
+browser(action="act", kind="evaluate",
+  fn="() => { const btns = document.querySelectorAll('.debug-menu button'); for (const b of btns) { if (b.textContent.trim() === '→ Move') { b.click(); return 'clicked'; } } return 'not found'; }")
+```
+
+**⚠️ IMPORTANT:** Debug phase skips require a loaded map. Use the `?map=745eebf0-f180-47b5-a14d-b68344db0320` URL param, OR navigate through the Battle Forge first. Without a map, the skip silently fails and you stay on the current screen.
+
+**How to verify a map is loaded:**
+```js
+browser(action="act", kind="evaluate",
+  fn="() => import('./core/game-state.js').then(m => ({ hasMap: !!m.gameState.loadedMapData, showScreen: typeof m.gameState.showScreen }))")
+// loadedMapData should be truthy, showScreen should be "function"
+```
+
+### 3.5 Full QA Playthrough Recipe
+Copy-paste this sequence for a complete automated QA run:
+
+```
+1. Open: browser(action="open", url="http://127.0.0.1:8767/mockups/integrated/v0.5/index.html?map=745eebf0-f180-47b5-a14d-b68344db0320&v=<timestamp>")
+2. Wait 2s
+3. Click gate: browser(action="act", kind="click", selector="#enter-gate")
+4. Wait 5s (boot animation)
+5. Screenshot: start screen ✓
+6. Show debug menu (evaluate: querySelector('.debug-menu').style.display = 'block')
+7. Click "→ Deploy" button (evaluate)
+8. Wait 5s
+9. Screenshot: deploy phase ✓
+10. Click "→ Move" → wait 4s → screenshot ✓
+11. Click "→ Shoot" → wait 4s → screenshot ✓
+12. Click "→ Charge" → wait 4s → screenshot ✓
+13. Click "→ Fight" → wait 4s → screenshot ✓
+14. Click "→ Game end" → wait 4s → screenshot ✓
+15. Check console errors: browser(action="console", level="error")
+```
+
+### 3.6 Cache Busting
+**ES modules are aggressively cached by browsers AND CDNs.**
+- **Local:** Append `?v=<timestamp>` to the URL. For deep cache issues, kill the python server and restart on a new port.
+- **GH Pages:** CDN cache can persist even after deploy completes. Hard-refresh, wait, or test locally instead.
+- **Verify new code is loaded:** Add `console.log('v2 loaded')` at the top of the changed file. If you don't see it in console, you're running stale code.
+- **index.html cache buster:** The `<script>` tags in `index.html` have `?v=<timestamp>` params. Update these when changing JS files before deploying.
+
+### 3.7 Import Path Rules (Post-Refactor)
+Files in subdirectories (`core/`, `fx/`, `screens/`, `map/`, `debug/`, `scenes/`, `deploy/`) have TWO kinds of `shared/` references:
+
+| Path type | Resolves relative to | Correct from subdir |
+|-----------|---------------------|---------------------|
+| `import ... from '../../../shared/...'` | The JS module file | `../../../shared/` |
+| `import('../../../shared/...')` (dynamic) | The JS module file | `../../../shared/` |
+| `fetch('../../shared/...')` | The HTML page (`v0.5/index.html`) | `../../shared/` |
+| `new Audio('../../shared/...')` | The HTML page | `../../shared/` |
+| `spriteBase: '../../shared/...'` | The HTML page (used in fetch) | `../../shared/` |
+
+**The rule:** `import` statements and `import()` calls resolve from the JS file (need deeper path). Runtime string paths used in `fetch()`, `Audio()`, element `.src`, etc. resolve from the HTML page (shallower path).
+
+### 3.8 Programmatic Drag Testing
+```js
+const hull = document.querySelector('.unit-hull[data-unit-id="<unit-id>"]');
+const rect = hull.getBoundingClientRect();
+hull.dispatchEvent(new MouseEvent('mousedown', { clientX: rect.x+10, clientY: rect.y+10, bubbles: true }));
+window.dispatchEvent(new MouseEvent('mousemove', { clientX: targetX, clientY: targetY, bubbles: true }));
+// Check element counts during drag:
+document.getElementById('drag-models').querySelectorAll('g[data-unit-id="..."]').length;  // should be N
+document.getElementById('layer-models').querySelectorAll('g[data-unit-id="..."]').length;  // should be 0
+window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+```
+
+### 3.9 What "Verified" Means
 - ❌ DOM query shows attribute exists → NOT verified (proves code was written, not that it renders)
 - ❌ Reading source code and concluding it should work → NOT verified
 - ✅ Screenshot showing the visual state → verified
