@@ -308,7 +308,30 @@ Auto-deploy shortcut: `⚡ AUTO DEPLOY ALL`
 | `fetch()` path matching `import` depth | fetch resolves from page, import from module | Different depths — see table above |
 | `setTimeout` cascades for animations | Timing-dependent, untestable | CSS animation-delay + animationend events |
 | Fixing symptoms not causes | Range rings leak? Don't add overflow:hidden — trace the render path | Start from symptom → trace backward |
+| Replacing a regression with a fallback instead of restoring the original source of truth | Hides what actually broke and creates fragile "works-for-now" behavior | If a feature worked in an earlier verified mockup/phase (e.g. integrated v0.5), first trace how it originally worked, identify what changed, and restore that pipeline before considering any fallback |
+| Inventing alternate game/render data when the map/SVG already contains the canonical answer | Produces drift from the real board and breaks parity with known-good versions | Prefer deriving gameplay blockers, layers, and interactions from the same map/SVG data the working version used; only add fallback data with explicit user approval |
 | Batching fixes without verifying each | Compound debugging | Fix → verify → screenshot → next fix |
+
+### Regression Rule: Restore, Don't Improvise
+
+When a gameplay or rendering behavior regresses after a refactor/migration:
+
+1. **Find the last known-good implementation** (often the integrated mockup or pre-migration version).
+2. **Trace the original data source** used by that implementation.
+   - Example: if LoS blockers came from map/SVG geometry, do not replace that with default terrain guesses.
+3. **Diff the pipeline, not just the file.**
+   - What loaded the data?
+   - What transformed it?
+   - What cached/exposed it?
+   - What consumer stopped reading it?
+4. **Restore the broken pipeline first.**
+5. Only propose a fallback if:
+   - the original source truly no longer exists,
+   - the user agrees,
+   - and the fallback is clearly documented as temporary.
+
+Bad fix: “loaded data seems empty, so synthesize blockers from defaults.”
+Good fix: “v0.5 derived blockers from SVG/map geometry; production migration stopped populating that path; restore the SVG-derived blocker pipeline.”
 
 ---
 
