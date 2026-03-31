@@ -1,375 +1,334 @@
 ---
 name: wh40k-simulator
-description: "WH40K Simulator project conventions: rendering architecture, visual bug fixing, browser verification, debug menu usage, engine contracts, and deployment pipeline. Use when working on ANY task in the warhammer-40k-simulator repo — engine, content, AI, UI, mockups, map editor, or CI. Covers: (1) visual/UI bugs and drag/rendering/SVG layer work, (2) engine rules and test conventions, (3) integrated mockup architecture, (4) deploy pipeline and verification patterns, (5) sub-agent task descriptions for this project."
+description: "WH40K Simulator project conventions: file placement, architecture, rendering, visual verification, debug menu, deploy pipeline, and sub-agent task descriptions. Use when working on ANY task in the warhammer-40k-simulator repo — game, editor, shared modules, mockups, or CI. Covers: (1) file placement rules and structure validation, (2) rendering architecture and SVG layers, (3) game phase system and state management, (4) browser verification and debug menu, (5) deploy pipeline, (6) sub-agent task descriptions. Includes self-staleness detection."
 ---
 
 # WH40K Simulator — Project Conventions
 
-> **⚠️ LIVING DOCUMENT — KEEP THIS UPDATED**
-> This skill captures hard-won knowledge about the WH40K simulator. It MUST evolve as the project develops. Every agent that reads this skill has a responsibility:
+> **⚠️ STALENESS CHECK — RUN THIS FIRST**
+> Before using this skill, verify the documented structure matches reality:
+> ```bash
+> cd <repo-root>
+> echo "=== Top dirs ===" && ls -d game/ shared/ editor/ mockups/ 2>/dev/null
+> echo "=== game/ ===" && ls game/
+> echo "=== game/phases/ ===" && ls game/phases/
+> echo "=== shared/ ===" && ls shared/
+> ```
+> If any directory listed in this skill doesn't exist, or new directories exist that aren't documented here — **update this skill before proceeding.** Wrong docs cause worse outcomes than no docs.
 >
-> 1. **Before starting work:** Read this skill AND the project's `AGENTS.md`. If anything here contradicts `AGENTS.md` or the actual codebase, update this skill.
-> 2. **After completing work:** If you discovered new architectural patterns, pitfalls, debug techniques, or rendering behaviors — **add them here before finishing.** Don't rely on memory.
-> 3. **If a section is stale:** File paths changed? Phase names renamed? New SVG layers added? Fix it now. Wrong docs are worse than no docs.
-> 4. **If the mockup version advances** (e.g. v0.5 → v0.6): Update all version-specific paths, layer names, and phase lists. Grep for the old version string.
->
-> The cost of NOT updating this skill = another 6-hour debugging session. Write it down.
+> Last verified: 2026-03-30 (PR #77 production migration)
 
 ## Project Location
 - **Repo:** `jrgrafton-openclaw/warhammer-40k-simulator`
 - **Pages:** `https://jrgrafton-openclaw.github.io/warhammer-40k-simulator/`
-- **Project AGENTS.md:** Read it first for architecture contracts, repo structure, and extension points.
-- **Current active branch:** Check `git branch` in the worktree — don't assume a specific branch name.
-- **Worktrees:** Run `git worktree list` from the main checkout to see all active worktrees.
+- **Local path:** `/Users/familybot/.openclaw/workspace/projects/warhammer-40k-simulator/`
+- **Issue tracker:** GitHub Issues on the repo. Check Issue #74 for the current MVP plan.
 
-## 1. Rendering Architecture (Integrated Mockup)
+---
 
-> **Update this section** when SVG layers are added/removed/renamed or the rendering pipeline changes.
+## 1. File Placement Rules (MANDATORY)
+
+**Before creating any new file, check this table.** If your file doesn't fit any category, ask the user — don't guess.
+
+| What you're creating | Where it goes | Example |
+|---------------------|---------------|---------|
+| Phase game logic (init, cleanup, scene registration) | `game/phases/<phase-name>/` | `game/phases/shoot/shooting.js` |
+| Phase helper/utility specific to one phase | `game/phases/<phase-name>/` | `game/phases/charge/charge-helpers.js` |
+| Core game infrastructure (state, routing, transitions) | `game/core/` | `game/core/scene-registry.js` |
+| Debug tools and overlays | `game/debug/` | `game/debug/debug-menu.js` |
+| Deployment state machine and UI | `game/deploy/` | `game/deploy/deployment.js` |
+| Map loading and collision | `game/map/` | `game/map/map-pipeline.js` |
+| Screen UIs (start, forge, options) | `game/screens/` | `game/screens/screen-forge.js` |
+| Visual effects (fog, lightning, explosions) | `game/fx/` | `game/fx/fog-fx.js` |
+| Game-specific CSS | `game/css/` | `game/css/shoot.css` |
+| Game-specific assets (audio, images) | `game/assets/` | `game/assets/ambient-loop.mp3` |
+| Shared state modules (store, units, config) | `shared/state/` | `shared/state/store.js` |
+| Shared rendering (SVG, models, terrain) | `shared/world/` | `shared/world/svg-renderer.js` |
+| Shared CSS (design tokens, component styles) | `shared/css/` | `shared/css/colors.css` |
+| Shared utilities | `shared/lib/` | `shared/lib/coord-helpers.js` |
+| Shared assets (sprites, music, SFX) | `shared/assets/` | `shared/assets/sprites/*.png` |
+| Shared auth | `shared/auth/` | `shared/auth/auth.js` |
+| Shared data (JSON configs) | `shared/data/` | `shared/data/deployment-types.json` |
+| Editor code | `editor/js/` | `editor/js/core/state.js` |
+| Editor CSS | `editor/css/` | `editor/css/sidebar.css` |
+| Tests | `game/__tests__/` or `editor/__tests__/` | `game/__tests__/shoot-integration.test.js` |
+| Networking/multiplayer (future) | `game/net/` (create when needed) | `game/net/room.js` |
+
+### File Placement Validation
+After creating or moving files, verify:
+```bash
+# No JS files in game/ root (except app.js, index.html, default-config.json)
+ls game/*.js  # Should ONLY show app.js
+
+# No CSS in game/ root
+ls game/*.css  # Should show nothing
+
+# No JS in shared/ root
+ls shared/*.js  # Should show nothing
+
+# All shared CSS consolidated in shared/css/
+ls shared/css/  # Should contain ALL shared CSS (colors, typography, component styles)
+```
+
+### Anti-Patterns
+- ❌ Creating a new file in `game/` root — belongs in a subdirectory
+- ❌ Mixing phase-specific and shared logic in one file
+- ❌ CSS in `shared/components/` — consolidated into `shared/css/`
+- ❌ Utility functions in `shared/world/` — belongs in `shared/lib/`
+- ❌ Files over 400 lines — split by responsibility
+- ❌ `window.__` globals for cross-module communication — use ES module imports
+
+---
+
+## 2. Directory Structure
+
+```
+game/                          # The game application
+  app.js                       # Entry point — imports all phases, wires game flow
+  index.html                   # Game HTML (served at / via <base> tag)
+  default-config.json          # FX config fallback (Supabase primary)
+  core/                        # Game infrastructure
+    game-bus.js                #   EventTarget bus for UI events
+    phase-state.js             #   Phase state tracking
+    scene-registry.js          #   Phase registration + transitionTo()
+    screen-router.js           #   Start/Forge/Game screen switching
+    transition.js              #   Forge→game transition animation
+  debug/                       # Debug tools
+    debug.js                   #   Debug panel controller + phase shortcuts
+    debug-menu.js              #   Debug menu UI builder
+    debug-menu.css             #   Debug menu styles
+    debug-deploy.js            #   Auto-deploy logic
+    debug-overlays.js          #   Visual debug overlays
+  deploy/                      # Deployment state machine
+    deployment.js              #   SVG tabletop, staging zones, drag placement
+    deploy-helpers.js           #   Deploy validation helpers
+    deploy-ui.js               #   Deploy UI (roster pills, status)
+  map/                         # Map loading
+    map-pipeline.js            #   Supabase map loading + terrain rendering
+    collision-layout.js        #   AABB collision from map data
+  phases/                      # Game phases (one subdir per phase)
+    command/                   #   Command phase (battle-shock, CP, VP)
+    deploy/                    #   Deploy scene registration
+    move/                      #   Movement (drag, validation, advance)
+    shoot/                     #   Shooting (weapon select, hit/wound/save, VFX)
+    charge/                    #   Charge (2D6 roll, engagement)
+    fight/                     #   Fight (pile-in, melee, consolidation)
+    game-end/                  #   Game end overlay
+  screens/                     # UI screens
+    screen-start.js            #   Start screen (title, menu)
+    screen-forge.js            #   Battle Forge (faction select, map, settings)
+    screen-options.js          #   Options/settings overlay
+  css/                         # Game-specific CSS
+  fx/                          # Visual effects (fog, lightning, explosions)
+  assets/                      # Game-specific media
+  __tests__/                   # Game tests (vitest, jsdom)
+  _to-port/                    # TypeScript code to port later (army loader, schemas)
+
+shared/                        # Shared between game + editor
+  state/                       # State modules
+    store.js                   #   simState, callbacks, scale constants
+    units.js                   #   UNITS data, card builder, tooltips
+    faction-config.js          #   Dynamic faction loading (setFactions)
+    game-config.js             #   Supabase game config CRUD
+    map-loader.js              #   Supabase map loading
+    terrain-data.js            #   Terrain type definitions
+  world/                       # Rendering + world simulation
+    svg-renderer.js            #   SVG board rendering, model interaction (~1200 lines)
+    model-renderer.js          #   Model circle rendering
+    zone-renderer.js           #   Deployment zone rendering
+    board-renderer.js          #   Board background rendering
+    collision.js               #   Terrain collision detection
+    range-rings.js             #   Per-model range ring rendering
+    layer-order.js             #   SVG layer z-ordering
+    camera.js, pathfinding.js, terrain.js, sprite-renderer.js, etc.
+  css/                         # ALL shared CSS
+    colors.css                 #   CSS custom properties (faction colors, theme)
+    typography.css             #   Font definitions
+    action-bar.css, battlefield.css, fx.css, overlays.css, phase-states.css,
+    roster.css, stratagem-modal.css, unit-card.css, vp-bar.css
+  lib/                         # Shared utilities
+    coord-helpers.js           #   Coordinate math, model radius
+    drag-scroll.js             #   Horizontal scroll drag for carousels
+  assets/                      # Shared media (sprites, music, SFX)
+  data/                        # Static JSON (deployment types, terrain layouts)
+  auth/                        # Supabase auth wrapper
+  audio/                       # SFX module
+
+editor/                        # Level editor (standalone)
+  index.html, js/, css/, data/, __tests__/
+
+mockups/                       # Frozen reference mockups (latest version only)
+  integrated/v0.5/             # Full game mockup (original)
+  phases/*/                    # Standalone phase mockups
+  battle-forge/v0.8/           # Battle forge mockup
+  shared/                      # Mockup shared assets
+```
+
+---
+
+## 3. Game Phase System
+
+### Phase Order
+`deploy` → `command` → `move` → `shoot` → `charge` → `fight` → `game-end`
+
+### How Phases Work
+Each phase registers with `scene-registry.js`:
+```js
+registerScene('shoot', {
+  init: initShooting,      // Called when entering phase
+  cleanup: cleanupShooting, // Called when leaving phase
+  config: {
+    title: 'SHOOTING PHASE',
+    bodyClass: 'phase-shoot',
+    cta: { text: 'END SHOOTING →' },
+    dotActive: 'SHOOT',
+    dotsDone: ['CMD', 'MOVE'],
+    nextPhase: 'charge'
+  }
+});
+```
+
+`transitionTo(phase)` handles: cleanup old → update DOM (title, dots, body class, CTA) → init new.
+
+### State Management
+- **`simState`** (in `shared/state/store.js`): Single mutable object — `units[]`, `drag`, `activeFaction`, `anim`
+- **`callbacks`**: Phase-specific hooks — `selectUnit`, `afterRender` (cleared on transition), `afterRenderPersistent` (survives transitions)
+- **Per-phase state**: Local `const state = {}` in each phase module (NOT in simState)
+- **DOM as state**: ~533 direct DOM mutations — CSS classes, element attributes used as state flags
+
+### What Each Phase Actually Does
+| Phase | Mechanics Implemented |
+|-------|----------------------|
+| **Deploy** | Drag units from staging → deployment zone, validation, auto-deploy |
+| **Command** | Battle-shock tests (2D6 vs Ld), CP gain (+1), VP scoring (objective proximity) |
+| **Move** | Normal move + Advance (M" + D6"), drag models, coherency check, engagement range |
+| **Shoot** | Full pipeline: weapon profiles → hit roll (BS+) → wound roll (S vs T) → save (AP + Sv) → damage → model removal. LoS, cover, Rapid Fire, projectile VFX |
+| **Charge** | 2D6 charge roll, drag-to-engage, engagement range check, success/fail |
+| **Fight** | Pile-in (3" drag), melee attacks (WS-based pipeline), consolidation (3" drag), model removal |
+| **Game End** | Score display, model counts, PLAY AGAIN |
+
+---
+
+## 4. Rendering Architecture
 
 ### SVG Layer Stack (bottom to top)
 ```
 #battlefield-inner
-  ├── #bf-svg-terrain    (SVG, overflow:VISIBLE, viewBox 0 0 720 528)
+  ├── #bf-svg-terrain    (overflow:VISIBLE, viewBox 0 0 720 528)
   │     ├── terrain sprites, zone rects
-  │     ├── #layer-models    (model groups live HERE after layer-order.js)
-  │     └── #layer-hulls     (unit hull paths)
-  ├── #bf-svg            (SVG, overflow:HIDDEN, viewBox 0 0 720 528)
-  │     ├── #layer-move-ghosts, #layer-debug-grid, etc.
-  │     └── #layer-range-rings   (legacy, unused in integrated — rings go to bf-svg-range)
-  ├── #bf-svg-range      (SVG, z-index:7, overflow:HIDDEN, pointer-events:none)
-  │     └── range ring <circle> elements drawn by range-rings.js
-  ├── #bf-svg-vignette   (SVG, z-index:8, edge vignette + zone vignettes)
-  └── #bf-svg-drag       (SVG, z-index:9, overflow:visible, pointer-events:none)
-        ├── #drag-hulls    (hull paths during drag)
-        └── #drag-models   (model groups during drag)
+  │     ├── #layer-models    (model circles — AFTER layer-order.js reparenting)
+  │     └── #layer-hulls     (unit hull outlines)
+  ├── #bf-svg            (overflow:HIDDEN)
+  │     └── #layer-move-ghosts, #layer-debug-grid, etc.
+  ├── #bf-svg-range      (z-index:7, pointer-events:none)
+  │     └── range ring circles
+  ├── #bf-svg-vignette   (z-index:8, edge/zone vignettes)
+  └── #bf-svg-drag       (z-index:9, overflow:visible, pointer-events:none)
+        ├── #drag-hulls, #drag-models (during drag)
 ```
 
-**Overflow rules matter:**
-- `overflow:hidden` = clips at viewBox boundary (720×528). Used for range rings, board clip.
-- `overflow:visible` = renders past viewBox. Used for terrain (edge effects) and drag (models near edges).
-- Moving elements between SVGs with different overflow rules changes clipping behavior — this was the root cause of bugs #52 and #53.
+### Render-Then-Reparent (CRITICAL)
+1. `renderModels()` recreates ALL model elements in `#layer-models`
+2. `callbacks.afterRender` fires AFTER render
+3. Reparenting to drag layer happens in callbacks only
 
-### Key Facts
-- **Board dimensions:** 720×528 px (playable area)
-- **`layer-order.js`** runs once at map load — reparents some model `<g>` elements from `#bf-svg` to `#bf-svg-terrain` for z-interleaving with terrain sprites
-- **`renderModels()`** (in `model-renderer.js`) always creates elements in `#layer-models`. It does NOT know about layer-order reparenting.
-- **`#layer-models` is INSIDE `#bf-svg-terrain`** (not a separate SVG)
+**NEVER move elements before render** — `renderModels()` recreates everything, causing duplicates.
 
-### Render-Then-Reparent Pattern (CRITICAL)
-The **only correct way** to lift elements above the vignette during drag:
+### Board Dimensions
+- Playable area: 720×528 px
+- PX_PER_INCH = 12
+- Standard infantry radius: 8px (32mm base)
 
-1. `renderModels()` recreates all model groups fresh in `#layer-models`
-2. `callbacks.afterRender` (per-phase) or `callbacks.afterRenderPersistent` (cross-phase) fires
-3. Reparent function clears `#drag-hulls` + `#drag-models` first, then moves freshly-rendered elements there
+---
 
-**NEVER move elements before render.** `renderModels()` recreates everything — pre-render moves create duplicates (one in drag layer from before, one freshly created in layer-models).
+## 5. Browser Verification
 
-### Callback Lifecycle
-| Callback | Set by | Cleared by | Survives phase transitions? |
-|----------|--------|------------|---------------------------|
-| `callbacks.afterRender` | Each scene (deploy, move, shoot, etc.) | `scene-registry.js transitionTo()` | ❌ No |
-| `callbacks.afterRenderPersistent` | `svg-renderer.js initModelInteraction()` | Never cleared | ✅ Yes |
-| `callbacks.selectUnit` | Each scene | `scene-registry.js transitionTo()` | ❌ No |
-| `callbacks.updateRangeCircles` | `svg-renderer.js` module init | Never cleared | ✅ Yes |
+### Debug Menu Access
+Press `D` key during gameplay (requires admin auth on live, works always locally).
 
-> **When adding new callbacks:** Decide if they need to survive phase transitions. If yes, add a `Persistent` variant in `model-renderer.js` and document it in this table.
+### Debug Phase Skip Buttons
+`→ Deploy` | `→ Command` | `→ Move` | `→ Shoot` | `→ Charge` | `→ Fight` | `→ Game End`
 
-### Deploy Phase Drag (Special Case)
-Deploy has its **own** drag reparenting in `deployment.js`:
-- Uses `deployState.placingUnit` (not `simState.drag`) to determine which unit to reparent
-- Registers its reparent via `callbacks.afterRender`
-- Has a `defineProperty` interceptor on `simState.drag` for blocking enemy drags and calling `startPlacement()`
-- `cleanupDeployment()` removes the interceptor (restores plain property)
+Auto-deploy shortcut: `⚡ AUTO DEPLOY ALL`
 
-**Rule:** `svg-renderer.js`'s `_reparentDraggedUnit()` must skip during deploy (`phase-deploy` body class check). Deploy owns its own reparenting.
-
-## 2. Board Boundary Clamping
-
-### `_clampUnitToBoard(unit)` in `svg-renderer.js`
-- **PAD = 10** (matches deploy's `_clampToZone`)
-- Cohesive shift: computes max overshoot per edge, applies single dx/dy to ALL models (preserves hull shape, no collapse)
-- **Offboard exemption:** Only skip clamping when `!simState.drag` AND any model has `x < 0`. During active drag, ALWAYS clamp — prevents units escaping past the left edge.
-- Fires on every `mousemove` + safety-net on `mouseup` for all drag types (unit, model, rotate)
-
-## 3. Testing & Browser Verification (MANDATORY)
-
-### 3.1 Serving the App Locally
-```bash
-# From the repo root:
-cd packages/ui/public && python3 -m http.server 8767 --bind 127.0.0.1
-
-# Mockup URL (with map pre-loaded for debug shortcuts):
-# http://127.0.0.1:8767/mockups/integrated/v0.5/index.html?map=745eebf0-f180-47b5-a14d-b68344db0320
-
-# Without ?map= : starts at real start screen (useful for full-flow QA)
-# With ?map=<uuid> : pre-loads that map from Supabase (required for debug phase skips)
+### Full QA Recipe
+```
+1. Open game URL
+2. Click to enter (audio gate)
+3. Wait 3s → screenshot start screen
+4. Select factions (Custodes + Orks)
+5. BEGIN BATTLE → screenshot deploy
+6. Press D → AUTO DEPLOY ALL
+7. Skip through each phase → screenshot each
+8. Check console errors: browser(action="console", level="error")
+9. Only favicon 404 is acceptable
 ```
 
-**GH Pages live URL:** `https://jrgrafton-openclaw.github.io/warhammer-40k-simulator/mockups/integrated/v0.5/index.html`
-**PR preview URL pattern:** `https://jrgrafton-openclaw.github.io/warhammer-40k-simulator/preview/pr-<N>/mockups/integrated/v0.5/index.html`
+### Import Path Rules
+| Path type | Resolves relative to | From `game/phases/shoot/` | From `game/` root |
+|-----------|---------------------|--------------------------|-------------------|
+| `import ... from` | Module file | `../../../shared/` | `../shared/` |
+| `import()` dynamic | Module file | `../../../shared/` | `../shared/` |
+| `fetch()`, `Audio()` | HTML page (`game/index.html`) | `../shared/` | `../shared/` |
+| CSS `url()` | CSS file | `../../assets/` | N/A |
 
-### 3.2 The Audio Gate (First Thing You See)
-The app starts with a full-screen "Click to Enter" gate (`#enter-gate`). This is an audio context gate required by browsers.
+### What "Verified" Means
+- ❌ DOM query → proves code was written, not that it renders
+- ❌ Reading source code → NOT verification
+- ✅ Screenshot → verified
+- ✅ Console error check → verified
+- ✅ Element count check → verified
 
-**How to dismiss it (browser automation):**
-```js
-// Method 1: Playwright-style click (preferred)
-browser(action="act", kind="click", selector="#enter-gate")
+---
 
-// Method 2: If click doesn't work (gate not visible to Playwright):
-browser(action="act", kind="evaluate",
-  fn="() => { document.getElementById('enter-gate').click(); return 'ok'; }")
-```
+## 6. Deploy Pipeline
 
-**After dismissing:** Wait 4-5 seconds for the start screen boot animation (title stamp, particles, menu fade-in).
+- **No build step** — vanilla JS served directly (no Vite, no bundler)
+- CI assembles `dist/`: copies `game/`, `shared/`, `editor/`, `mockups/` → deploys to gh-pages
+- Root `/` serves game via `<base href="game/">` tag in `dist/index.html`
+- PR previews at `preview/pr-<N>/`
+- Cache-bust: `?v=<timestamp>` on JS imports in HTML
+- **NEVER commit directly to gh-pages**
 
-### 3.3 The Start Screen → Battle Forge → Game Flow
-The full UI flow is: **Gate → Start Screen → Battle Forge → Game (Deploy → Move → Shoot → Charge → Fight → Game End)**
+### Deploy URLs
+- Game: `https://...github.io/warhammer-40k-simulator/` (redirects to game/)
+- Editor: `https://...github.io/warhammer-40k-simulator/editor/`
+- Mockups: `https://...github.io/warhammer-40k-simulator/mockups/integrated/v0.5/`
 
-| Screen | Key elements | How to reach |
-|--------|-------------|-------------|
-| **Start Screen** | "New Game", "Load Game", "Settings" buttons + title animation | Dismiss gate |
-| **Battle Forge** | Faction pickers, map dropdown, deployment type grid, "BEGIN BATTLE" button | Click "New Game" |
-| **Deploy** | Board with terrain, roster sidebar, deployment zones, "CONFIRM DEPLOYMENT" | Click "BEGIN BATTLE" (needs factions selected) OR debug skip |
-| **Move** | Action bar: "NORMAL MOVE", "ADVANCE", "END MOVEMENT" | Complete deploy OR debug skip |
-| **Shoot** | Shooting action bar | Complete move OR debug skip |
-| **Charge** | Charge action bar | Complete shoot OR debug skip |
-| **Fight** | Fight action bar | Complete charge OR debug skip |
-| **Game End** | Victory/defeat overlay, "PLAY AGAIN" button | Complete fight OR debug skip |
+---
 
-### 3.4 Debug Menu — Fast Phase Testing (USE THIS)
-The debug menu is the fastest way to test individual phases without clicking through the full game flow.
-
-**How to access:**
-```js
-// Show the debug menu (it starts hidden):
-browser(action="act", kind="evaluate",
-  fn="() => { document.querySelector('.debug-menu').style.display = 'block'; return 'shown'; }")
-```
-
-**Debug menu buttons:**
-- `RESET` / `RESET MIN/MAX` — reset unit positions
-- `⚡ AUTO DEPLOY ALL` — auto-deploy all units to valid positions
-- **`→ Deploy`** — skip to deploy phase (loads map if needed)
-- **`→ Move`** — skip to move phase (auto-deploys units first)
-- **`→ Shoot`** — skip to shoot phase
-- **`→ Charge`** — skip to charge phase
-- **`→ Fight`** — skip to fight phase
-- **`→ Game end`** — skip to game end phase
-- `SAVE CONFIG` — save debug config
-
-**Clicking a phase skip button via JS:**
-```js
-browser(action="act", kind="evaluate",
-  fn="() => { const btns = document.querySelectorAll('.debug-menu button'); for (const b of btns) { if (b.textContent.trim() === '→ Move') { b.click(); return 'clicked'; } } return 'not found'; }")
-```
-
-**⚠️ IMPORTANT:** Debug phase skips require a loaded map. Use the `?map=745eebf0-f180-47b5-a14d-b68344db0320` URL param, OR navigate through the Battle Forge first. Without a map, the skip silently fails and you stay on the current screen.
-
-**How to verify a map is loaded:**
-```js
-browser(action="act", kind="evaluate",
-  fn="() => import('./core/game-state.js').then(m => ({ hasMap: !!m.gameState.loadedMapData, showScreen: typeof m.gameState.showScreen }))")
-// loadedMapData should be truthy, showScreen should be "function"
-```
-
-### 3.5 Full QA Playthrough Recipe
-Copy-paste this sequence for a complete automated QA run:
-
-```
-1. Open: browser(action="open", url="http://127.0.0.1:8767/mockups/integrated/v0.5/index.html?map=745eebf0-f180-47b5-a14d-b68344db0320&v=<timestamp>")
-2. Wait 2s
-3. Click gate: browser(action="act", kind="click", selector="#enter-gate")
-4. Wait 5s (boot animation)
-5. Screenshot: start screen ✓
-6. Show debug menu (evaluate: querySelector('.debug-menu').style.display = 'block')
-7. Click "→ Deploy" button (evaluate)
-8. Wait 5s
-9. Screenshot: deploy phase ✓
-10. Click "→ Move" → wait 4s → screenshot ✓
-11. Click "→ Shoot" → wait 4s → screenshot ✓
-12. Click "→ Charge" → wait 4s → screenshot ✓
-13. Click "→ Fight" → wait 4s → screenshot ✓
-14. Click "→ Game end" → wait 4s → screenshot ✓
-15. Check console errors: browser(action="console", level="error")
-```
-
-### 3.6 Cache Busting
-**ES modules are aggressively cached by browsers AND CDNs.**
-- **Local:** Append `?v=<timestamp>` to the URL. For deep cache issues, kill the python server and restart on a new port.
-- **GH Pages:** CDN cache can persist even after deploy completes. Hard-refresh, wait, or test locally instead.
-- **Verify new code is loaded:** Add `console.log('v2 loaded')` at the top of the changed file. If you don't see it in console, you're running stale code.
-- **index.html cache buster:** The `<script>` tags in `index.html` have `?v=<timestamp>` params. Update these when changing JS files before deploying.
-
-### 3.7 Import Path Rules (Post-Refactor)
-Files in subdirectories (`core/`, `fx/`, `screens/`, `map/`, `debug/`, `scenes/`, `deploy/`) have TWO kinds of `shared/` references:
-
-| Path type | Resolves relative to | Correct from subdir |
-|-----------|---------------------|---------------------|
-| `import ... from '../../../shared/...'` | The JS module file | `../../../shared/` |
-| `import('../../../shared/...')` (dynamic) | The JS module file | `../../../shared/` |
-| `fetch('../../shared/...')` | The HTML page (`v0.5/index.html`) | `../../shared/` |
-| `new Audio('../../shared/...')` | The HTML page | `../../shared/` |
-| `spriteBase: '../../shared/...'` | The HTML page (used in fetch) | `../../shared/` |
-
-**The rule:** `import` statements and `import()` calls resolve from the JS file (need deeper path). Runtime string paths used in `fetch()`, `Audio()`, element `.src`, etc. resolve from the HTML page (shallower path).
-
-### 3.8 Programmatic Drag Testing
-```js
-const hull = document.querySelector('.unit-hull[data-unit-id="<unit-id>"]');
-const rect = hull.getBoundingClientRect();
-hull.dispatchEvent(new MouseEvent('mousedown', { clientX: rect.x+10, clientY: rect.y+10, bubbles: true }));
-window.dispatchEvent(new MouseEvent('mousemove', { clientX: targetX, clientY: targetY, bubbles: true }));
-// Check element counts during drag:
-document.getElementById('drag-models').querySelectorAll('g[data-unit-id="..."]').length;  // should be N
-document.getElementById('layer-models').querySelectorAll('g[data-unit-id="..."]').length;  // should be 0
-window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-```
-
-### 3.9 What "Verified" Means
-- ❌ DOM query shows attribute exists → NOT verified (proves code was written, not that it renders)
-- ❌ Reading source code and concluding it should work → NOT verified
-- ✅ Screenshot showing the visual state → verified
-- ✅ Element count check during drag (drag-models vs layer-models) → verified
-- ✅ Coordinate check after drag (all within board bounds) → verified
-
-## 4. Common Pitfalls
-
-> **When you discover a new pitfall:** Add it to this table immediately.
+## 7. Common Pitfalls
 
 | Pitfall | Why it fails | Prevention |
 |---------|-------------|------------|
-| Moving elements before `renderModels()` | `renderModels()` recreates all elements → duplicates | Always use afterRender/afterRenderPersistent callback |
-| `if (m.x < 0) skip clamp` during drag | Models cross x=0 during drag → clamp disables | Gate offboard skip with `!simState.drag` |
-| Deploy's `defineProperty` interceptor leaking | Persists after deploy cleanup → blocks ork drag, calls `startPlacement()` in wrong phase | `cleanupDeployment()` must `delete simState.drag; simState.drag = currentDrag;` |
-| `callbacks.afterRender` cleared on phase transition | Scene-registry nulls it in `transitionTo()` | Use `afterRenderPersistent` for cross-phase behavior |
-| Browser caching ES modules | Old code runs despite file changes | Append `?v=N` to URL for cache bust |
-| SVG `clipPath` across reparented elements | `clipPath` in `#bf-svg` doesn't clip elements reparented to `#bf-svg-terrain` | Use arc paths or HTML overlay instead of cross-SVG clipPath |
-| "Verified" via DOM query only | Proves code was written, not that it renders correctly | Always use browser screenshot or element count checks |
+| Moving elements before `renderModels()` | Creates duplicates | Use afterRender callbacks |
+| `window.__` globals for state | Untraceable, untestable | Use ES module imports |
+| Files > 400 lines | LLM confusion, mixed concerns | Split by responsibility |
+| Hardcoded `'imp'`/`'ork'` strings | Breaks with custom factions | Use `factionA.id`/`factionB.id` from faction-config |
+| `fetch()` path matching `import` depth | fetch resolves from page, import from module | Different depths — see table above |
+| `setTimeout` cascades for animations | Timing-dependent, untestable | CSS animation-delay + animationend events |
+| Fixing symptoms not causes | Range rings leak? Don't add overflow:hidden — trace the render path | Start from symptom → trace backward |
+| Batching fixes without verifying each | Compound debugging | Fix → verify → screenshot → next fix |
 
-## 5. Deploy Pipeline
-
-- CI runs on push to any PR branch
-- PR preview deploys to `preview/pr-<N>/` on `gh-pages`
-- **NEVER commit directly to `gh-pages`** — CI rebuilds it from source
-- Check CI: `gh run list --repo jrgrafton-openclaw/warhammer-40k-simulator --limit 3`
-- Version banner in console: `[v0.5] commit=<hash> built=<timestamp>` — verify the deployed commit matches your push
-
-## 6. Engine & Content Conventions
-
-### Read AGENTS.md First
-The project `AGENTS.md` at the repo root defines architecture contracts, dependency direction, extension points, and test conventions. **Read it before any task.** This skill supplements it with hard-won operational knowledge.
-
-### Architecture Contracts (from AGENTS.md — check AGENTS.md for current version)
-- **Engine has NO external deps.** Works in Node, Deno, browsers.
-- **State is immutable from outside.** `engine.getState()` returns a deep clone. Mutate only via `engine.dispatch(action)`.
-- **ALL randomness via `SeededRng`.** Never `Math.random()` in engine/content/ai.
-- **Dependency direction:** engine ← content ← ai ← ui (never import upstream)
-
-### Test Commands
-```bash
-pnpm test              # All engine/content tests (Vitest, no UI rendering tests)
-pnpm test -- --watch   # Watch mode
-```
-
-### Test Fixtures
-- **Custodes 1985pt army:** `packages/content/src/__tests__/fixtures/custodes-test-army.json`
-- Use real fixtures for integration testing — don't test with empty/minimal state
-
-### Golden Transcript Tests
-Fixed seed → deterministic hash. If you change the pipeline (resolver order, dice logic, ability effects), the hash changes. Update the hash in the test AND explain why in the commit message.
-
-## 7. Worktree Policy
-For any non-trivial change, use a git worktree:
-```bash
-git worktree add /private/tmp/wh40k-<feature> -b <branch> <base-branch>
-```
-Run `git worktree list` to see existing worktrees before creating new ones. Clean up worktrees when branches are merged.
+---
 
 ## 8. Sub-Agent Task Descriptions
-When spawning sub-agents for WH40K work, include:
-- The rendering architecture summary (Section 1) for any UI task
-- The render-then-reparent rule for any drag/layer work
-- Debug menu instructions for visual verification
-- The exact browser verification steps (Section 3)
-- `pnpm test` must pass before committing
-- **Remind the sub-agent to update this skill** if they discover new patterns or pitfalls
 
-There are NO automated tests for the rendering layer. All visual verification must be done in-browser using the debug menu.
+When spawning coding agents for WH40K work, include in the task:
 
-## 9. Game Phases
-> **Update this list** when new phases are added or renamed.
+1. **File placement table** (Section 1) — "New files go in these directories"
+2. **Import path rules** — static vs dynamic vs runtime resolution
+3. **Phase system** — how registerScene works, what init/cleanup do
+4. **Verification requirement** — "run `npx vitest run` and verify zero console errors in browser"
+5. **This instruction:** "After completing, check if any new patterns or pitfalls were discovered. If so, note them for the orchestrator to add to the WH40K skill."
 
-Current phases (in order): `deploy` → `command` → `move` → `shoot` → `charge` → `fight` → `game-end`
+---
 
-Each phase has:
-- A scene file: `scenes/scene-<phase>.js`
-- A scene-registry config registered via `registerScene('<phase>', { ... })`
-- A body class: `phase-<phase>`
-- Cleanup runs on exit, init runs on entry (via `transitionTo()`)
+## 9. Architecture Principles
 
-## 10. Architectural Best Practices (Hard-Won Lessons)
-
-These rules come from real multi-hour debugging sessions. Violating any of them has historically led to 6+ hour fix cycles with 20+ wasted commits.
-
-### 10.1 No `setTimeout` Cascades — Use Deterministic Callbacks
-- **NEVER** chain `setTimeout` calls to sequence visual transitions. They drift, they're untestable, and they break when frame rates change.
-- **DO:** Use CSS `animation-delay` for sequenced animations, `animationend`/`transitionend` events for callbacks, or `requestAnimationFrame` for frame-precise work.
-- **Example of what went wrong:** `transition.js` had 4 nested `setTimeout` calls at hardcoded delays (200ms, 400ms, 600ms, 1000ms) to orchestrate the forge→game handoff. Result: timing-dependent visual glitches that reproduced intermittently.
-- **The fix:** CSS `animation-delay` on each element + a single `animationend` listener on the last element in the sequence.
-
-### 10.2 Shared Abstractions Between Phases and Components
-- **ALWAYS** look for existing patterns before writing new code. If two phases do similar things (drag, selection, range display, zone rendering), extract the shared behavior.
-- **Specific rule:** The debug menu, the forge, and the game MUST use the same code paths for deployment type switching, objective rendering, and zone management. The forge's deployment type switcher must call the SAME functions as the debug menu's — not a "simplified version."
-- **What went wrong:** Forge had its own zone-clearing logic that was subtly different from the debug menu's. Result: objectives disappeared on deployment type switch in forge but not in debug.
-- **Phase CSS:** Don't copy-paste phase-specific CSS. Use a shared class (e.g. `.phase-post-deploy`) that all post-deploy phases share, instead of writing identical rules for `.phase-move`, `.phase-shoot`, `.phase-charge`, `.phase-fight`, `.phase-game-end`.
-- **Editor + Game sharing:** Map rendering, zone rendering, terrain loading — these should be shared modules importable by both the level editor and the game. Don't maintain two implementations.
-
-### 10.3 File Organization — Think Before Creating
-Before creating a new file:
-1. **Group by responsibility, not by type.** Don't dump all JS into one flat folder. Group into `core/` (state, config, game-state-bridge), `map/` (zone-renderer, layer-order, collision), `scenes/` (per-phase logic), `debug/` (debug menu, shortcuts), `css/` (component stylesheets).
-2. **Check for an existing home.** Would this code fit better as a function in an existing module?
-3. **Keep files under 400 lines.** If a file exceeds this, split it by responsibility. `deployment.js` at 1,274 lines was a god-file that owned deploy state, deploy UI, deploy drag, deploy validation, and cleanup — 5+ responsibilities in one file.
-4. **CSS components:** Split CSS by component/concern (layout, phases, deploy, forge, fx, debug) rather than one monolithic `style.css`.
-5. **ES modules over IIFEs.** All new code should be ES modules with explicit imports/exports. No `window.__` globals for cross-module communication — use proper imports.
-
-### 10.4 Import Path Discipline
-- **Static imports at the top** of the file set the baseline. If the file is in `v0.5/core/`, the path to `shared/` is `../../../shared/`.
-- **Dynamic imports must use the same path depth** as static imports in the same file. The bug from PR #69: static imports used `../../../shared/` (correct) but a dynamic `import()` used `../../shared/` (wrong — resolves to `integrated/shared/` instead of `mockups/shared/`).
-- **Rule:** After adding any dynamic import, verify its resolved path matches the static imports.
-
-### 10.5 Don't Guess — Trace the Full Path
-When debugging a visual issue:
-1. **Start from the user-visible symptom** (what's wrong on screen).
-2. **Trace the render path backward:** What function renders this element? What state drives it? What event triggers the state change?
-3. **Never fix symptoms.** If range rings leak past the board, don't just add `overflow:hidden` — understand which SVG they're in, whether `layer-order.js` reparented them, and whether the clipPath moved with them.
-4. **Verify your mental model** by logging or breakpointing at each step in the chain before writing a fix.
-
-### 10.6 Render-Then-Reparent Is Not Optional
-This pattern is the single most critical architectural constraint in the rendering layer:
-1. `renderModels()` recreates all elements in `#layer-models`
-2. Callbacks fire AFTER render
-3. Reparenting happens in callbacks
-
-Moving elements BEFORE render creates duplicates. This mistake has been made 3 times across different agents. See Section 1 for the full lifecycle.
-
-### 10.7 Visual Verification Is Not DOM Querying
-- DOM queries prove code was written. Screenshots prove it renders.
-- Element count checks (drag-models vs layer-models) prove reparenting works.
-- Computed style checks (opacity, transform, visibility) prove CSS applies.
-- Timeline captures (sampling computed styles every 100ms) prove animations run.
-- **Temporary diagnostic exaggeration:** When checking subtle visual states, temporarily set `outline: 3px solid red` or `opacity: 1 !important` on suspect elements, capture proof, then remove. This catches low-contrast/subtle defects that screenshots alone miss.
-
-### 10.8 One Bug at a Time
-Fix → verify on GH Pages or local server → confirm with screenshot/proof → THEN move to next bug. Do not batch fixes and hope they all work. Every unverified fix creates compound debugging when something breaks.
-
-### 10.9 CSS Grid Animation Constraints
-- CSS **cannot interpolate** between different grid track counts (`1fr` ↔ `220px 1fr`).
-- To animate a sidebar appearing: use the SAME track structure with `0px` width (e.g. `0px 1fr` → `220px 1fr`).
-- `display:none` elements cannot be animated into. JS-driven opacity after layout transition completes.
-
-### 10.10 Cache Busting
-- ES modules are aggressively cached by browsers.
-- Append `?v=<timestamp>` to URLs when testing changes locally.
-- Update the cache-buster param in `index.html` script tags before deploying.
-- **Verify new code is loaded:** Add a temporary `console.log('v2 loaded')` marker and check the console before trusting browser behavior. Wasted 30+ minutes once because old code was running despite file edits.
+1. **Group by responsibility, not by type** — `game/phases/shoot/` not `game/js/`
+2. **Shared modules are import-only** — `shared/` never imports from `game/` or `editor/`
+3. **Each phase owns its state** — local `const state = {}`, not globals
+4. **CSS by component** — split into `shared/css/` (design tokens, shared components) and `game/css/` (phase-specific)
+5. **ES modules everywhere** — explicit imports/exports, no IIFEs, no `window.__`
+6. **Tests next to what they test** — `game/__tests__/` for game, `editor/__tests__/` for editor
