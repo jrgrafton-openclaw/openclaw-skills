@@ -1,11 +1,32 @@
 ---
 name: firebase
-description: "Manage Firebase projects and apps from the terminal using a GCP Service Account — no manual login required. Use when: registering a new iOS app in Firebase, fetching GoogleService-Info.plist, or automating Firebase project operations. NOT for: crash analysis (use ios-crash-diagnosis) or general GCP billing."
+description: "Manage Firebase projects and app registrations from the terminal using configured service-account credentials. Use when registering a new iOS app in Firebase, fetching GoogleService-Info.plist, or automating routine Firebase app-management tasks. NOT for crash analysis or general GCP billing/admin work outside Firebase app operations."
 ---
 
-# Firebase Skill
+# Firebase app management
 
-Operations for managing Firebase apps (like iOS apps) directly from the terminal without manual login, by relying on the GCP Service Account secret.
+Use the provided helper scripts for deterministic Firebase app setup.
 
-## Operations
-- To create a new iOS app and fetch `GoogleService-Info.plist`: use `./create-ios-app.sh <project_id> <display_name> <bundle_id> [app_store_id]`
+## iOS app registration
+
+Use:
+
+```bash
+scripts/create-ios-app.sh <project_id> <display_name> <bundle_id> [app_store_id] [output_path]
+```
+
+What it does:
+1. creates the iOS app
+2. resolves the created Firebase app ID
+3. downloads `GoogleService-Info.plist`
+4. prints the saved output path
+
+## Requirements
+
+- service account file must exist at `~/.openclaw/secrets/firebase/service-account.json`
+- `firebase-tools` must be available via `npx`
+
+## Failure handling
+
+If the app already exists, stop and report it rather than creating duplicates.
+If plist download fails, report the app ID and the failing command.
