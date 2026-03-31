@@ -1,43 +1,62 @@
 ---
 name: gh-pages
-description: "Manage repositories that publish static files directly from the gh-pages branch without a CI rebuild pipeline. Use when a repo's Pages source is explicitly the gh-pages branch and content must be synced manually. NOT for repos where CI or GitHub Actions rebuilds gh-pages from main or another source branch."
+description: "CI-first GitHub Pages deployment workflow for static sites and web app previews. Use when setting up or fixing GitHub Pages publishing so main deploys automatically via CI, pull requests get preview deploys, and `gh-pages` is treated as build output rather than a manual working branch. NOT for manual branch-only Pages workflows."
 ---
 
-# Manual GitHub Pages branch workflow
+# CI-first GitHub Pages
 
-Use this skill only after confirming the repo really serves directly from `gh-pages`.
+Use this skill to set up GitHub Pages the way we want it to work now:
 
-## Preflight
+1. **Always deploy via CI**
+2. **Every PR gets a preview deploy**
+3. **Production Pages deploy comes from `main` via workflow**
+4. **`gh-pages` is build output, not a manual editing branch**
 
-1. Confirm what branch GitHub Pages is configured to serve.
-2. Inspect recent history on `origin/gh-pages`.
-3. If recent commits are automated deploy commits, stop — this skill does **not** apply.
+The reference implementation is the WH40K repo:
+`jrgrafton-openclaw/warhammer-40k-simulator`
 
-```bash
-git log --oneline origin/gh-pages -5
-```
+## Default pattern
 
-## Safe workflow
+### Main branch
+- run tests/build in CI
+- if CI passes on `main`, publish the built output to `gh-pages`
+- never hand-edit `gh-pages`
 
-1. Make and test changes on the source branch first.
-2. Check out `gh-pages` locally.
-3. Copy only the intended published files from source into `gh-pages`.
-4. Commit with a conventional commit.
-5. Push `gh-pages`.
-6. Verify the live URL.
+### Pull requests
+- build the PR in CI
+- publish preview output under `preview/pr-<number>/`
+- comment the preview URL back on the PR
 
-Example:
+### Cleanup
+- when the PR closes, delete its preview directory from `gh-pages`
 
-```bash
-git fetch origin gh-pages
-git checkout -B gh-pages origin/gh-pages
-git checkout main -- path/to/published/files
-git commit -m "docs(pages): sync published static files"
-git push origin gh-pages
-```
+## Rules
 
-## Guardrails
+- **Do not commit directly to `gh-pages`.**
+- **Do not ask the agent to sync files manually between `main` and `gh-pages`.**
+- **Use the WH40K workflows as the starting template** unless the repo has a strong reason to differ.
+- **Preserve other previews** when deploying a single PR preview (`keep_files: true`).
+- **Verify the live Pages URL after deploy.**
 
-- Do **not** force-push unless the branch is intentionally disposable and you have confirmed that with the user.
-- Do **not** use this workflow for repos with CI-driven Pages deploys.
-- Do **not** edit generated output only; always update the source branch too when a build pipeline exists.
+## What to copy from WH40K
+
+See `references/wh40k-pattern.md` for the exact workflow shape.
+
+At minimum, mirror these three workflows:
+- main CI + production deploy
+- PR preview deploy
+- preview cleanup on PR close
+
+## Required deliverables when applying this skill
+
+1. A production Pages workflow that deploys from `main`
+2. A PR preview workflow that comments the preview URL
+3. A cleanup workflow that removes stale preview directories
+4. A short note in the repo docs/AGENTS.md explaining the Pages URLs and preview pattern
+
+## Verification
+
+After wiring the workflows:
+- confirm PR preview URL is posted and loads
+- confirm `main` deploy lands at the production URL
+- confirm closing a PR removes its preview directory
