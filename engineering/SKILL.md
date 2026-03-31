@@ -1,325 +1,105 @@
 ---
 name: engineering
-description: "Agentic engineering conventions for every project: project file structure (AGENTS.md, CHANGELOG.md, architecture.md), workspace-root plan.md workflow, mandatory git worktrees for feature work, conventional commits, explicit PR writeups (features implemented + bugs fixed + verification), Codex review wait/evaluate/fix loop, and branch/test/merge/deploy/cleanup discipline. Use when: (1) starting a new project, (2) onboarding onto an existing one, (3) implementing any non-trivial feature (3+ steps, multiple interacting subsystems, or transform/state pipeline work), (4) fixing bugs in any project (includes cache-busting and deploy conventions), (5) asked about engineering process, planning workflow, PR workflow, or changelog setup. NOT for platform-specific build/deploy steps (use ios-devops, gh-issues, etc.)."
+description: "Project-level engineering workflow and quality standards for non-trivial software work. Use when: (1) starting or onboarding to a project, (2) planning or implementing a feature with 3+ steps, multiple subsystems, or state/transform pipelines, (3) fixing bugs that need reproduction, tests, and verification, (4) preparing a PR, release, or deploy, or (5) asked about process, planning, changelogs, or review workflow. NOT for platform-specific build/deploy procedures that already have a dedicated skill."
 ---
 
 # Engineering Conventions
 
-## 1. Project Setup
+Use this skill as the default process wrapper for substantial software work.
 
-### Required Files
+## Core rules
 
-| File | Purpose | Auto-generated? |
-|------|---------|----------------|
-| `AGENTS.md` | AI context (what it is, how to build, key commands) | No — write once |
-| `CHANGELOG.md` | What shipped and when | Yes — via git-cliff |
-| `docs/architecture.md` | Why it's designed the way it is | No — maintain as decisions are made |
+1. **Plan first** for any task with 3+ steps, architecture choices, migrations, deploys, or unclear requirements.
+2. **Prefer the smallest design that works**. Minimal surface area beats cleverness.
+3. **Reproduce before fixing**. If you cannot reproduce the bug, you do not understand it yet.
+4. **Verify before claiming done**. Run the relevant tests/builds and report proof.
+5. **Do not trust delegated coding work blindly**. Independently verify important UI, deploy, and integration changes.
 
-**Naming: use `AGENTS.md`** — the cross-tool standard (OpenAI Codex, Cursor, Claude Code all read it).
+## Required project files
 
-See `assets/AGENTS.md.template` for the required sections.
+Every maintained project should have:
 
-### plan.md — Ephemeral Feature Plans
+- `AGENTS.md` — project context and key commands
+- `docs/architecture.md` — architectural decisions and boundaries
+- `CHANGELOG.md` — generated from conventional commits where possible
 
-`plan.md` lives at the **workspace root** (not in the project repo), not committed.
+See `assets/AGENTS.md.template`, `assets/plan.md.template`, and `references/project-setup.md`.
 
-Lifecycle:
-1. **Create** at feature start — copy `assets/plan.md.template`, fill in goal/steps/AC
-2. **Work** — check off steps, update with discoveries
-3. **Delete** when the feature merges to main
+## Standard workflow
 
-### Plans Must Include Tests
+1. **Plan**
+   - Write 3–7 checkable steps.
+   - Include explicit acceptance criteria.
+   - Include a **Tests** section in any plan shown to the user or another agent.
+2. **Isolate work**
+   - For non-trivial work, use a dedicated branch/worktree.
+3. **Read before writing**
+   - Trace the interacting codepaths before changing transforms, state, undo, rendering, or orchestration logic.
+4. **Implement**
+   - Prefer test-first when practical.
+   - Keep commits small and conventional.
+5. **Verify**
+   - Re-run targeted tests/build/checks.
+   - For UI work, run the interactive verification checklist.
+6. **Ship**
+   - Summarize features implemented, bugs fixed, verification run, and follow-ups/risks.
 
-Every plan presented to the user — whether a plan.md file, a Slack message, or a sub-agent task — must include a **Tests** section listing what tests will be written. Tests are not an implementation detail; they define acceptance criteria.
+## Non-negotiable quality bars
 
-Bad: "Step 1: add color helper. Step 2: wire it up. Step 3: add slider."
-Good: "Step 1: add color helper. Step 2: wire it up. Step 3: add slider. **Tests:** color helper edge cases, serialize round-trip, backwards compat, visual verification with non-default color."
+### Tests-first discipline
 
-If you present a plan without tests, you haven't finished planning.
+For new behavior or bug fixes:
+1. Write the test.
+2. Run it and confirm it fails.
+3. Implement the minimum fix.
+4. Re-run and confirm it passes.
 
----
+See `references/testing-and-refactoring.md`.
 
-## 2. Git Discipline
+### Refactoring discipline
 
-### Worktree Policy
+When unifying or refactoring a subsystem:
+- find **all** consumers first
+- update consumers before adding new producers
+- grep for old access patterns before calling the refactor complete
+- if >10 tests break, stop and identify the shared root cause instead of fixing failures one by one
 
-For any non-trivial feature, fix, or PR-driven task:
+See `references/testing-and-refactoring.md`.
 
-1. **Create a dedicated git worktree first**
-2. **Create/use the feature branch inside that worktree**
-3. **Do not implement non-trivial work in the main checkout**
+### UI verification gate
 
-Default sequence:
-worktree → branch → implement/verify → PR → review → fix → re-verify → merge → verify deploy/CI → cleanup
+After UI changes, test the actual interaction surface:
+- click/tap every changed control
+- type into every changed input
+- test full lifecycle flows where relevant
+- reload and confirm state persistence when applicable
+- use screenshots for before/after confirmation
 
-### Conventional Commits
+See `references/ui-verification.md`.
 
-Format: `type(scope): short description`
-Types: `feat`, `fix`, `chore`, `docs`, `test`, `refactor`, `perf`, `ci`
+## Pull request / merge workflow
 
-### Commit Sizing
+Before merge:
+1. verify locally
+2. simplify obvious unnecessary complexity
+3. wait for review / CI
+4. address only worthwhile feedback
+5. re-verify after changes
+6. confirm deploy / release result when applicable
 
-Each commit = one logical change that builds and tests green.
-For complex visual/interactive bugs: **one change per push** — make ONE change, verify, commit, then the next.
+PR descriptions must include:
+- features implemented
+- bugs fixed
+- verification run
+- follow-ups / risks
 
----
+See `references/release-and-review.md`.
 
-## 3. Refactoring Discipline
+## Coding agent guidance
 
-**This section exists because of a real failure:** an entity system refactor introduced 8 bifurcated code paths because creation was unified but consumption was not audited.
+If you delegate implementation to another agent:
+- give explicit file paths, constraints, and acceptance criteria
+- require concrete verification output
+- do not report success to the user until you have checked the result yourself
 
-### The Consumer-First Rule
-
-When unifying N implementations behind a shared interface:
-
-1. **Find ALL consumers first** — grep for every function/property that accesses the old type-specific code (`_findSprite`, `C.allSprites.find`, `sp.rootEl`, etc.)
-2. **List every call site** — not just the ones you think are relevant
-3. **Update consumers BEFORE adding new producers** — if `addToGroup()` still calls `_findSprite()`, adding a new entity type that passes through `addToGroup()` will silently fail
-4. **Test each consumer with each type** — if groups should work for sprites + FX + lights, test all three in groups
-
-### The Grep Audit
-
-Before marking a refactor complete, run:
-```bash
-# Find all references to the old type-specific code
-grep -rn 'oldFunction\|oldProperty\|OldType' src/
-```
-Every hit is either: (a) intentionally type-specific (guard with comment why), or (b) a bug you need to fix.
-
-### Test With the Full Fixture
-
-When the user provides a test fixture (JSON scene, config file, etc.):
-- **Always load it** for integration testing — don't test with empty/minimal state
-- Save it as a test fixture file in the project
-- Real scenes have groups, nested entities, edge cases that empty scenes miss
-
-### Bulk Test Failure Rule
-
-If a change breaks >10 tests, do **NOT** fix them individually. Stop.
-
-1. **Categorize** — grep the error messages, group by pattern (e.g. "Cannot read properties of undefined (reading 'init')" × 40 = one root cause)
-2. **Find the root cause** — there are almost always 1–3 root causes, not 10+ independent bugs
-3. **Fix the root cause, not the symptoms** — if 80 tests fail because the module loading order changed, fix the loader, not 80 tests
-4. **If you committed with bulk failures, revert first** — don't layer fixes on top of a broken commit. `git stash` your fixes, revert to green, reapply the original change + root-cause fix together
-
-**Anti-pattern:** Spending 20+ minutes chasing individual test failures when they all share one underlying cause (e.g. persistence format change broke test harness assumptions). Time yourself — if you've spent >5 minutes on individual failures without the count dropping significantly, step back and look for the shared root.
-
-### Common Refactoring Traps
-
-| Trap | Example | Prevention |
-|------|---------|------------|
-| **Unified creation, bifurcated consumption** | Entity created with shared interface but `_findSprite()` still used in undo commands | Grep for all old accessors before marking done |
-| **Copied rendering, missed interaction** | FX row renders in layers panel but has no drag handlers | For every "create row" call, check: does the old type also set up event handlers? |
-| **String-based type dispatch** | `if (id.startsWith('fx'))` instead of `entity.type === 'fire'` | Use the Entity interface, not string heuristics |
-| **Partial handler coverage** | mousedown handler calls `select()` but forgets `preventDefault()` that the old code had | Diff the old handler against the new one line by line |
-
----
-
-## 4. Implementation Workflow
-
-### Read Before Writing
-
-Before implementing code that touches transforms, state pipelines, undo systems, or any multi-layered subsystem: **read ALL interacting code first.** Trace one concrete example through the full pipeline with real values before designing.
-
-### Tests First
-
-1. Write test that describes the desired behavior
-2. Run test — confirm it **fails** (proves the test is real)
-3. Implement the minimum code to make it pass
-4. Run test — confirm it **passes**
-
-**For bug fixes:** write a test that reproduces the bug → confirm red → fix → confirm green.
-
-### Reproduce Before Fixing
-
-Before writing ANY fix, reproduce the exact bug:
-- For visual bugs: in the browser
-- For logic bugs: with a failing test
-- If you can't reproduce it, you don't understand it yet
-
-### Stop After a Failed Fix
-
-If a fix doesn't work, do NOT immediately try another approach. First: explain WHY the previous fix failed. Write it down. Two failed fixes in a row = step back, read all interacting code, restate the problem from scratch.
-
----
-
-## 5. Visual & Interactive Verification
-
-### Coding Agent Model Policy
-
-**Always use Opus for coding agents.** No exceptions. Lesser models produce wrong API signatures, untested assumptions, and confident false completion reports. The cost difference is negligible; fixing the mess always costs more.
-
-- `claude --permission-mode bypassPermissions --print --model claude-opus-4-6`
-
-### Claude Code `--print` Mode — Do Not Kill Prematurely
-
-`claude --print` buffers ALL output until the task finishes. This means:
-
-- **No intermediate output is visible** — "no output yet" does NOT mean stuck
-- **15–20 min with no output is normal** for complex multi-file tasks (6+ bugs, reading many files)
-- **Memory growth is a GOOD sign** — rising RSS means it's actively working
-- **Git commits may appear late** — Claude Code often reads/plans extensively before writing
-
-**NEVER kill a Claude Code `--print` session just because it's "taking too long" without evidence of an actual hang.** Evidence of a real hang:
-- Process CPU at 0% for >5 minutes (check with `ps -p PID -o %cpu=`)
-- Memory stopped growing AND no file changes for >10 minutes
-- Process exited with error code
-
-**Monitoring strategy (best → worst signal):**
-```bash
-# 1. BEST: check for uncommitted file changes (agent is actively writing)
-git status --short
-git diff --stat
-# 2. GOOD: check for new commits (agent completed a unit of work)
-git log --oneline -3
-# 3. LAST RESORT: check process is alive (tells you nothing about progress)
-ps -p PID -o rss=,etime=,%cpu=
-```
-
-Prefer `git status` over process stats — file changes prove the agent is writing code, not just reading.
-
-**If you must intervene:** use `process action:log` first. If truly stuck, kill and respawn with a simpler prompt (fewer bugs per run).
-
-### Sub-Agent Timeout Sizing
-
-Sub-agents (via `sessions_spawn`) need enough time for their workload:
-
-| Task type | Recommended timeout | Notes |
-|-----------|-------------------|-------|
-| QA code review (5-10 files) | 10 min | Sonnet can do it in 2-5 min but needs buffer for gh pr comment |
-| QA with browser testing | 15 min | Browser automation is slow + flaky |
-| Feature implementation | 20-30 min | Complex multi-file changes |
-| Code review + fix cycle | 15 min | Read + analyze + write fixes |
-
-**Root cause of past timeouts:** Sonnet sub-agents spent all their time reading files via tool calls, leaving no time for the final `gh pr comment`. Solutions:
-1. Use Opus (faster per-turn throughput)
-2. Give 10 min minimum, even for "simple" reviews
-3. Split large reviews into smaller chunks (3-4 files per agent)
-4. For code-only reviews, explicitly say "no browser" to prevent wasted time
-
-### Interactive QA Gate (Mandatory for UI Changes)
-
-After implementing UI changes, test EVERY interactive element before reporting done:
-
-1. **Click every button/menu item** and verify it does what it claims
-2. **Type in every input field** — test spaces, special chars, empty string, very long string
-3. **Test the full lifecycle**: create → rename → use → delete
-4. **Test state persistence**: do the action → reload page → verify state survived
-5. **Test edge cases**: 0 items, 1 item, delete the last item
-6. **Check shortcut conflicts**: focus an input field, press common shortcuts (space, arrows, letters) — they should NOT trigger editor shortcuts
-7. **Test dismissal**: click-outside closes dropdowns/modals, Esc cancels editing
-
-If you delegated to a coding agent: **do not trust its self-report.** Open the page and run through this checklist yourself. "Tests pass + screenshot looks OK" is NOT sufficient for UI work.
-
-If you cannot test interactively (no browser access), explicitly LIST what needs manual testing and tell the user you haven't verified behavior.
-
-### Screenshot Gate (Mandatory for UI Changes)
-
-1. **Before** — screenshot the current visual state
-2. **Change** — make the code change
-3. **After** — screenshot the new visual state
-4. **Compare** — confirm the difference matches intent
-5. **Measure** — turn subtle visual expectations into explicit checks whenever possible
-6. **Only then** — commit
-
-Never commit visual changes based solely on "the math looks right."
-
-For subtle visual bugs, prefer measurable checks over vague inspection. Examples:
-- expected center object is at viewport center
-- container left/right edges match viewport bounds
-- overlay/fade exists on both sides, not just one
-- phase-specific shading/opacity is non-zero when active and zero when inactive
-
-When direct inspection is too subtle, temporarily add **diagnostic exaggeration** during QA:
-- increase opacity/contrast/saturation of the suspect layer
-- swap subtle fades for loud colors temporarily
-- add outlines, guides, center lines, or bounding boxes
-- log geometry (`getBoundingClientRect`, computed opacity, transform values)
-
-Use these temporary exaggerations only to detect the bug faster; remove them before commit unless they are intentional debug tooling.
-
-### Interactive Verification (Mandatory for Interactions)
-
-For drag, resize, rotate, click handlers:
-1. Reproduce the bug interactively before writing any fix
-2. Test the fix interactively (simulate user interaction, not just compute values)
-3. Test at multiple states (e.g. 0°, 45°, 90°, odd angles)
-4. Test edge cases (flipped, zero-size, nested in groups)
-
-### Coordinate Space Discipline
-
-When working with transforms (rotation, scale, flip, translation):
-1. **Label every variable** with its coordinate space: `// global (screen)` or `// local (pre-rotation)`
-2. **Verify with concrete numbers** at rot=0 AND rot=90 before coding
-3. **Never mix coordinate spaces**
-4. **Anchor point rule** — when resize changes rotation center, compute visual drift and compensate
-
----
-
-## 6. Pull Request Workflow
-
-### PR Loop
-
-1. Implement in worktree
-2. Verify locally
-3. Open PR
-4. Wait for review / automated feedback
-5. Evaluate comments (correct? relevant? worth the complexity?)
-6. Fix real issues; ignore noise
-7. Re-verify after changes
-8. Merge when CI is green
-9. Verify merge + deploy
-10. Inform the user
-
-### PR Description (Required)
-
-Every PR body must explicitly list:
-
-```md
-## Features implemented
-- ...
-
-## Bugs fixed
-- ...
-
-## Verification
-- `pnpm test` — N tests pass
-- browser QA for [specific interactions]
-
-## Follow-ups / risks
-- ...
-```
-
-### PR Preview for GitHub Pages
-
-Add `.github/workflows/pr-preview.yml` for static HTML projects:
-- `destination_dir: preview/pr-${{ github.event.pull_request.number }}`
-- `keep_files: true` to preserve other previews
-- Auto-comment with preview URL
-
-### Cache Busting on Manual gh-pages Deploys
-
-When manually copying files to `gh-pages` and pushing:
-1. **Update version params** on all `<script>` and `<link>` tags in `index.html` (e.g. `?v=t1742860000` → new timestamp)
-2. **Verify after deploy** — open the page in the browser, confirm the new code is actually executing (not just served). CDNs cache per full URL including query params; stale params = stale code.
-3. If the page still shows old behavior after deploy + cache bust, check `curl -s <script-url>` to confirm the CDN is serving the new file before blaming code.
-
----
-
-## 7. CHANGELOG
-
-```bash
-# Setup (once per project)
-bash skills/engineering/assets/setup-cliff.sh <project-dir>
-
-# Update after each release/tag
-git cliff -o CHANGELOG.md
-```
-
-Requires conventional commits.
-
----
-
-## 8. Quick Reference
-
-See `references/agentic-practices.md` for expanded rationale on tests-first, branch workflow, commit discipline, and AGENTS.md quality bar.
+See `references/coding-agents.md`.

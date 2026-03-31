@@ -1,250 +1,65 @@
 ---
 name: ios-devops
-description: "Build, sign, upload, and distribute iOS apps to TestFlight via Fastlane and the App Store Connect API. Use when asked to deploy, ship, build, push to TestFlight, run fastlane beta, or distribute any iOS app. Also covers recovery from failed/partial builds, build state auditing, and ASC API operations. NOT for: Xcode project setup (use ios-prototype), crash diagnosis (use ios-crash-diagnosis), or Swift concurrency issues (use ios-swift6-concurrency)."
+description: "Build, sign, upload, and distribute iOS apps to TestFlight via Fastlane and the App Store Connect API. Use when asked to deploy, ship, build, push to TestFlight, run fastlane beta, or recover a partially completed iOS release. NOT for project setup/prototyping, crash diagnosis, or Swift concurrency debugging."
 ---
 
-# iOS DevOps — Build & Ship to TestFlight
+# iOS DevOps — build and ship to TestFlight
 
-## Critical Rules
+## Critical rules
 
-1. **ALWAYS set locale before fastlane:** `LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8` — altool crashes without it.
-2. **NEVER use `upload_to_testflight` or `pilot distribute`** — they silently lie about distribution. Use altool for upload + ASC API for distribution.
-3. **NEVER use `xcpretty`** — it crashes on non-ASCII output and hides the real build result.
-4. **NEVER run fastlane in background without feedback** — always run foreground with a timeout, or use `yieldMs: 300000` (5 min) and poll.
-5. **ALWAYS audit build state before running `fastlane beta`** — check git status, existing IPA, and ASC builds first.
-6. **ALWAYS run `verify-and-distribute.py` after every build** — this is the safety net that catches undistributed builds when sessions die during ASC processing.
-7. **ALWAYS verify distribution succeeded before reporting to the user** — never say "shipped" until you've confirmed the build is in the beta group.
+1. Always set `LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8` before Fastlane.
+2. Never claim a build shipped until distribution is verified.
+3. Never run a long build in the background without a progress/reporting plan.
+4. Always audit current build state before starting a new release.
+5. Always run the post-build verification/distribution safety-net script.
 
-## Post-Build Verification (MANDATORY after every build)
+## Standard release workflow
 
-**This is the #1 lesson from builds 77/78 being uploaded but never distributed.**
+### 1. Pre-flight
 
-After `fastlane beta` completes (or times out, or the session dies), ALWAYS run:
+Before every build:
+- check git status and recent commits
+- check whether an IPA already exists
+- check the current build number
+- audit recent ASC builds
 
-```bash
-python3 <SKILL_DIR>/scripts/verify-and-distribute.py [APP_ID] [GROUP_ID]
-```
+Use:
+- `scripts/check-asc-builds.py`
 
-This script:
-- Fetches all recent builds from ASC (limit=30, not 10)
-- Compares against what's in the beta group
-- Automatically distributes any VALID builds that are missing from the group
-- Reports PROCESSING builds that need a re-check later
-
-**Run it even if `fastlane beta` reports success.** The Fastfile's inline distribution can silently fail if the ASC API returns a transient error, or if the session is killed during the 2-15 minute processing wait.
-
-### Session Timeout Recovery Pattern
-
-When running `fastlane beta` via OpenClaw, the session may time out during the ASC processing poll (the longest step, 2-15 min). If this happens:
-
-1. The IPA uploaded successfully (altool completed before the poll)
-2. The build number was incremented in Info.plist
-3. But: distribution never happened, git commit never happened
-
-**Recovery:**
-```bash
-cd <PROJECT_ROOT>
-
-# 1. Check what happened
-python3 <SKILL_DIR>/scripts/check-asc-builds.py
-
-# 2. Distribute any undistributed builds
-python3 <SKILL_DIR>/scripts/verify-and-distribute.py
-
-# 3. Fix git state
-git add -A
-git commit -m "[ci skip] Bump build to <N> — recovered from session timeout"
-git push
-```
-
-## Pre-Flight Checklist (MANDATORY before every build)
-
-Run this BEFORE `fastlane beta`:
-
-```bash
-cd <PROJECT_ROOT>
-
-# 1. Check git state — if Info.plist is dirty, a prior run failed mid-flight
-git status --short
-git log --oneline -3
-
-# 2. Check for existing IPA
-ls -la build/*.ipa 2>/dev/null
-
-# 3. Check current build number
-/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' <PATH_TO_INFO_PLIST>
-
-# 4. Check what's in ASC — this now flags undistributed builds
-python3 <SKILL_DIR>/scripts/check-asc-builds.py
-```
-
-**If Info.plist is modified (dirty):** A prior run crashed after bumping the build number. Reset with `git checkout <Info.plist path>` OR verify the build already uploaded to ASC before retrying.
-
-**If an IPA exists and is recent:** The prior run may have succeeded. Check ASC before rebuilding.
-
-**If check-asc-builds.py flags undistributed builds:** Run `verify-and-distribute.py` before doing anything else.
-
-## Running the Build
+### 2. Build
 
 ```bash
 cd <PROJECT_ROOT>
 LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 bundle exec fastlane beta
 ```
 
-**Expected timing:**
+### 3. Verify distribution
 
-| Phase | Time |
-|-------|------|
-| Build + archive (SingCoach) | ~3–4 min |
-| altool upload | ~1–2 min |
-| ASC processing (PROCESSING → VALID) | **5 min – several hours** (Apple's queue, uncontrollable) |
-| verify-and-distribute.py | ~30 sec |
-| **Total** | **~7 min – hours** |
+Always run after the build completes, times out, or is interrupted:
 
-Small app (SwiftDesignPlayground): build ~60s; ASC processing same variable range.
-**Do not re-upload if PROCESSING takes longer than expected — just wait. Duplicate uploads waste time and can confuse ASC.**
-
-**Exec pattern for OpenClaw:** Use `yieldMs: 300000` (5 min) for small apps, `yieldMs: 600000` (10 min) for medium apps. Then poll. Do NOT use `background: true` without polling.
-
-```
-exec(command: "cd <path> && LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 bundle exec fastlane beta", yieldMs: 300000)
+```bash
+python3 <SKILL_DIR>/scripts/verify-and-distribute.py [APP_ID] [GROUP_ID]
 ```
 
-If the command backgrounds, poll with `process(action: "poll", sessionId: "<id>", timeout: 60000)` every 60 seconds until complete. **Report progress to the user immediately** — don't wait for the full pipeline to finish.
+### 4. Recover partial failures
 
-**AFTER the build completes or times out:**
-```
-exec(command: "python3 <SKILL_DIR>/scripts/verify-and-distribute.py [APP_ID] [GROUP_ID]")
-```
-
-Only tell the user the build shipped after this verification passes.
+If upload succeeded but distribution or commit/push did not:
+- audit ASC state
+- distribute missing VALID builds
+- repair local git state
 
 ## Scripts
 
 | Script | Purpose |
-|--------|---------|
-| `scripts/check-asc-builds.py` | Audit: show recent builds + distribution status, flag gaps |
-| `scripts/distribute-build.py <VERSION>` | Distribute a specific build (polls until VALID first) |
-| `scripts/verify-and-distribute.py` | **Safety net:** find and fix ALL undistributed builds |
+|---|---|
+| `scripts/check-asc-builds.py` | show recent builds and distribution gaps |
+| `scripts/distribute-build.py <VERSION>` | wait for VALID, then distribute one build |
+| `scripts/verify-and-distribute.py` | safety-net: distribute all missing VALID builds |
 
-All scripts default to SingCoach IDs but accept `[APP_ID] [GROUP_ID]` args for any app.
+## References
 
-## Recovery from Partial Failures
+- `references/troubleshooting.md` — common failures
+- `references/credentials.md` — secret locations and API details
+- `references/project-config.md` — per-app IDs and paths
 
-### Build uploaded but not distributed (SESSION TIMEOUT — most common)
-```bash
-python3 <SKILL_DIR>/scripts/verify-and-distribute.py
-# Then fix git state:
-git add -A && git commit -m "[ci skip] Bump build to <N>" && git push
-```
-
-### Build uploaded but git commit failed
-The build is already on TestFlight. Just fix and commit:
-```bash
-git add <Info.plist> <project.pbxproj>
-git commit -m "[ci skip] Bump build to <N>"
-git push
-```
-
-### altool says "bundle version already used"
-The build already uploaded. Poll ASC until it appears as VALID, then distribute:
-```bash
-python3 <SKILL_DIR>/scripts/distribute-build.py <VERSION>
-```
-
-## Project-Specific IDs
-
-### SingCoach
-- **ASC App ID:** `6759441600`
-- **Bundle ID:** `com.jrgrafton.singcoach`
-- **Internal Testers Group:** `7b26e051-1109-4403-b4a3-86873cbf970e`
-- **Project Path:** `projects/SingCoach/`
-- **Info.plist:** `SingCoach/Info.plist`
-
-### SwiftDesignPlayground
-- **ASC App ID:** `6759811915`
-- **Bundle ID:** `com.jrgrafton.swift.design.playground`
-- **Project Path:** `projects/SwiftDesignPlayground/`
-- **Info.plist:** `Info.plist`
-- **Internal Testers Group:** `3e9bf740-1bea-4a46-b0e7-e0b569e55f6b`
-- **GitHub:** `jrgrafton-openclaw/SwiftDesignPlayground`
-
-### ASC API Credentials
-- **Key:** `~/.openclaw/secrets/app-store-connect/AuthKey_7UKLD4C2CC.p8`
-- **Key ID:** `7UKLD4C2CC`
-- **Issuer:** `69a6de70-79a7-47e3-e053-5b8c7c11a4d1`
-- **Team ID:** `B5X96QDRF4`
-
-## First-Time App Setup (one-off, before first build)
-
-Before the first `fastlane beta` for a new app, ensure:
-
-1. **Beta group exists** — create via ASC API:
-   ```python
-   POST /v1/betaGroups  {"data":{"type":"betaGroups","attributes":{"name":"Internal Testers","isInternalGroup":true},"relationships":{"app":{"data":{"type":"apps","id":"<APP_ID>"}}}}}
-   ```
-
-2. **Testers are explicitly added to the group** — internal groups do NOT auto-invite team members. You must create/add each tester:
-   ```python
-   POST /v1/betaTesters  {"data":{"type":"betaTesters","attributes":{"firstName":"James","lastName":"Grafton","email":"jrgrafton@gmail.com"},"relationships":{"betaGroups":{"data":[{"type":"betaGroups","id":"<GROUP_ID>"}]}}}}
-   ```
-   This sends the TestFlight invite email. Without this step, the build lands in the group but nobody gets notified or can install it. 409 on this endpoint means the tester already exists — that's fine if `inviteType: EMAIL` is set.
-
-3. **Git remote configured** — `gh repo create <org>/<name> --public --source=. --push`
-
-4. **`.gitignore` includes build artifacts** — IPAs, dSYMs, certs, profiles, and `build/` must NEVER be committed. Ensure these patterns exist:
-   ```
-   build/
-   *.ipa
-   *.app.dSYM.zip
-   *.xcarchive
-   *.cer
-   *.mobileprovision
-   *.p12
-   fastlane/report.xml
-   fastlane/README.md
-   fastlane/*.mobileprovision
-   xcuserdata/
-   DerivedData/
-   .DS_Store
-   ```
-   Fastlane fetches certs/profiles at build time — they are ephemeral, not source code.
-
-## Fastfile Architecture
-
-Every Fastfile should follow this pattern:
-
-1. `before_all`: Set `LC_ALL`/`LANG`, `setup_ci` if CI
-2. `api_key` private lane: Create ASC API key object
-3. `create_json_key` private lane: Write JSON key for tools that need file path
-4. `beta` lane:
-   - Unlock keychain + set partition list
-   - `sigh` to download provisioning profile (use `api_key_path`, not `api_key`)
-   - Install profile to `~/Library/MobileDevice/Provisioning Profiles/`
-   - `update_code_signing_settings` for manual signing
-   - Bump build via `PlistBuddy` (NOT `increment_build_number`)
-   - Archive with `xcodebuild` (redirect to log, no xcpretty)
-   - Export with `xcodebuild -exportArchive` (use dynamic `profile_uuid` in export options)
-   - Upload with `xcrun altool` (symlink key to `~/.appstoreconnect/private_keys/`)
-   - Poll ASC API until VALID, then add to beta group
-   - Git tag, commit (with `allow_nothing_to_commit: true`), push
-
-**Known vulnerability:** The ASC poll + beta group add (step 11) runs inline in the Fastfile. If the OpenClaw session dies during this 2-15 minute window, the upload succeeds but distribution doesn't happen. **The `verify-and-distribute.py` safety net exists specifically for this case.** Always run it after the build, regardless of outcome.
-
-## Common Failure Modes
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Build uploaded but not shared | Session died during ASC poll | `verify-and-distribute.py` |
-| `invalid byte sequence in US-ASCII` | Missing `LC_ALL`/`LANG` | Set env vars in `before_all` |
-| `errSecInternalComponent` | Keychain locked | `security unlock-keychain` + `set-key-partition-list` |
-| `No profiles found` at export | Hardcoded/wrong profile UUID | Use dynamic `profile_uuid` from `sigh` |
-| `nothing to commit` at git step | Prior run already committed | Use `allow_nothing_to_commit: true` |
-| ASC API 422 on beta group add | Build still PROCESSING | Poll until VALID (10s intervals, 15 min timeout) |
-| Crashlytics dSYM upload hangs | Network call blocks xcodebuild | Set `SKIP_CRASHLYTICS_DSYM_UPLOAD=1` |
-| altool "version already used" | Duplicate upload | Don't re-upload; poll ASC + distribute |
-| `LaunchScreen` / `UILaunchScreen` missing | No launch storyboard in bundle | Add `<key>UILaunchScreen</key><dict/>` to Info.plist (iOS 14+) |
-| `push_git_tags` fails "not a git repository" | No git remote configured | `gh repo create <org>/<name> --public --source=. --push` |
-| altool fails but pipeline continues | `grep` at end of pipe swallows exit code | Add `set -o pipefail` at start of sh block |
-| Build in group but no invite sent | Testers not explicitly added to group | `POST /v1/betaTesters` with group relationship — required even for internal groups |
-| `check-asc-builds.py` misses builds | `limit=10` too low, ASC returns arbitrary order | Use `limit=30` (now the default) |
+Keep project-specific IDs out of `SKILL.md`; store them in references or project docs.

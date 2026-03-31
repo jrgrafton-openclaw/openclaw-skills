@@ -1,50 +1,46 @@
 ---
 name: frontend-design
-description: Production-grade frontend code and design. Use when building, modifying, or iterating on any web frontend — pages, components, mockups, HTML/CSS/JS layouts, animations, audio, or visual polish. Includes creating new UIs and fixing/improving existing ones (visual bugs, animation refactors, adding effects). Enforces CSS-first animation patterns, proper Web API usage, and quality gates that prevent hacky solutions (e.g. setTimeout animation timelines, setInterval volume fades). Generates distinctive, polished code that avoids generic AI aesthetics.
+description: "Production-grade frontend code and visual design for web interfaces. Use when building or revising pages, components, mockups, layouts, animation systems, or visual polish for a web frontend. Strong fit for UI work where aesthetic direction, motion, typography, and implementation quality matter. NOT for product/process planning or platform-specific release workflows covered by other skills."
 ---
 
-This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.
+# Frontend design
 
-The user provides frontend requirements: a component, page, application, or interface to build. They may include context about the purpose, audience, or technical constraints.
+Build working frontend code with a clear visual point of view.
 
-## Design Thinking
+## Workflow
 
-Before coding, understand the context and commit to a BOLD aesthetic direction:
-- **Purpose**: What problem does this interface solve? Who uses it?
-- **Tone**: Pick an extreme: brutally minimal, maximalist chaos, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw, art deco/geometric, soft/pastel, industrial/utilitarian, etc. There are so many flavors to choose from. Use these for inspiration but design one that is true to the aesthetic direction.
-- **Constraints**: Technical requirements (framework, performance, accessibility).\n- **Differentiation**: What makes this UNFORGETTABLE? What's the one thing someone will remember?
+1. **Read the context first**
+   - what is being built
+   - who it is for
+   - what constraints matter
+2. **Choose one strong aesthetic direction**
+   - commit to a look instead of averaging several weak ones
+3. **Implement real code**
+   - production-grade HTML/CSS/JS or framework code
+4. **Verify**
+   - responsive behavior
+   - interaction quality
+   - accessibility basics
+   - visual consistency
+5. **Summarize**
+   - what changed
+   - what to review manually
 
-**CRITICAL**: Choose a clear conceptual direction and execute it with precision. Bold maximalism and refined minimalism both work - the key is intentionality, not intensity.
+## Design rules
 
-Then implement working code (HTML/CSS/JS, React, Vue, etc.) that is:
-- Production-grade and functional
-- Visually striking and memorable
-- Cohesive with a clear aesthetic point-of-view
-- Meticulously refined in every detail
-
-## Frontend Aesthetics Guidelines
-
-Focus on:
-- **Typography**: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics; unexpected, characterful font choices. Pair a distinctive display font with a refined body font.
-- **Color & Theme**: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes.
-- **Motion**: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions. Use scroll-triggering and hover states that surprise.
-- **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements. Generous negative space OR controlled density.
-- **Backgrounds & Visual Details**: Create atmosphere and depth rather than defaulting to solid colors. Add contextual effects and textures that match the overall aesthetic. Apply creative forms like gradient meshes, noise textures, geometric patterns, layered transparencies, dramatic shadows, decorative borders, custom cursors, and grain overlays.
-
-NEVER use generic AI-generated aesthetics like overused font families (Inter, Roboto, Arial, system fonts), cliched color schemes (particularly purple gradients on white backgrounds), predictable layouts and component patterns, and cookie-cutter design that lacks context-specific character.
-
-Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices (Space Grotesk, for example) across generations.
-
-**IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
+- Prefer distinctive typography and deliberate composition.
+- Use CSS-first motion for web UI whenever practical.
+- Avoid generic AI aesthetics and timid palettes.
+- Match implementation complexity to the intended aesthetic.
 
 ## Icons
 
-When creating SVG icons for a UI system:
-- **Inline SVG only** — no emoji, no icon libraries, no external assets. Draw with `stroke="currentColor"` so color inherits from CSS.
-- **Consistent stroke-width** — pick ONE stroke-width (e.g. 1.8) and use it across ALL icons in the set. Internal details can be slightly thinner (e.g. 1.4) but the primary outlines must match.
-- **No fills** — icons should be pure stroke outlines. Never use `fill="currentColor"` or `opacity` on icon elements. Fills create inconsistent visual weight across icons with different shapes/areas.
-- **Hover via CSS only** — change `color` (which drives `currentColor`) and optionally add `filter: drop-shadow()`. Never use per-icon fill effects — they're impossible to keep consistent.
-- **Uniform viewBox** — use `viewBox="0 0 24 24"` for all icons in a set.
-- **Visual verification** — always screenshot and hover-test the full icon set together. Inconsistencies are only visible when icons are side-by-side.
+- inline SVG only
+- consistent stroke system
+- no mixed visual weights across a set
+- verify icons side-by-side in the actual UI
 
-Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+## References
+
+- `references/visual-checklist.md`
+- `references/animation-patterns.md`
