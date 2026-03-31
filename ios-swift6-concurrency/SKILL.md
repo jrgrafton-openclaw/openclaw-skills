@@ -1,109 +1,38 @@
 ---
 name: ios-swift6-concurrency
-description: "Reference for solving Swift 6 concurrency errors: sendability, actor isolation, and callbacks. Use when: compiler throws 'sending X risks causing data races', a closure traps on a background thread, or you need to fix '@MainActor' isolation bugs in iOS 26+ projects. Includes the critical AudioCallback pattern."
-metadata:
-  {
-    "openclaw": {
-      "emoji": "🚦"
-    }
-  }
+description: "Reference for solving Swift 6 concurrency errors: sendability, actor isolation, and callback/threading traps. Use when the compiler throws sendability/data-race errors, a closure traps on a background thread, or you need to fix @MainActor isolation bugs in modern iOS projects. Use ios-crash-diagnosis when you are starting from a crash log rather than a compiler/runtime pattern."
 ---
 
-# Swift 6 Concurrency Patterns
+# Swift 6 concurrency patterns
 
-Use this skill to fix Swift 6 concurrency errors and strict concurrency crashes in iOS projects.
+Use this skill for compiler/runtime concurrency issues in iOS code.
 
-## 1. The Audio/Video Callback Crash (`_swift_task_checkIsolatedSwift`)
+## 1. Audio/video callback isolation trap
 
-**The Problem:**
-You pass a closure to `AVAudioEngine`, `AVAudioSourceNode`, or a `Timer` that will be invoked on a background thread. If you define this closure inside a `@MainActor` method, the Swift 6 compiler explicitly injects a `@MainActor` check into the generated thunk, even if you never capture `self`. It will crash at runtime with `EXC_BREAKPOINT`.
+If a framework callback runs on a background or realtime thread, do not define that closure inside a `@MainActor` scope.
 
-**The WRONG Fix (Do NOT do this):**
-```swift
-// Still crashes! The *lexical scope* is what makes the compiler inject the check.
-input.installTap(...) { [weak self] buffer, time in ... }
-```
+Wrong fix:
+- changing captures only
 
-**The RIGHT Fix:**
-Move the closure creation to a `nonisolated` free function or `nonisolated` static method:
+Right fix:
+- create the closure in a `nonisolated` function or static helper
+- hop back to main only for the UI update
 
-```swift
-// 1. In a nonisolated context (e.g. AudioCallbacks.swift)
-nonisolated func makeAudioTapHandler(
-    sampleRate: Double,
-    handler: @escaping @Sendable ([Float], Double) -> Void
-) -> ((AVAudioPCMBuffer, AVAudioTime) -> Void) {
-    return { buffer, _ in
-        // Process buffer on the audio thread...
-        DispatchQueue.main.async { handler(samples, sampleRate) }
-    }
-}
+See `references/audio-callback-pattern.md`.
 
-// 2. In your @MainActor class
-let tapHandler = makeAudioTapHandler(sampleRate: 44100) { samples, sr in
-    MainActor.assumeIsolated {
-        self.handleSamples(samples)
-    }
-}
-input.installTap(onBus: 0, bufferSize: 1024, format: format, block: tapHandler)
-```
+## 2. SwiftData / model sendability
 
-## 2. Model "Sending risks causing data races" (SwiftData)
+Do not pass model objects across actor/task boundaries.
 
-**The Problem:**
-`@Model` objects (like `Lesson` or `Song`) are not `Sendable`. Passing them into a detached task, a network upload service, or a background process triggers a Swift 6 error: "sending X risks causing data races".
+Correct pattern:
+- extract primitives (`URL`, `String`, `Bool`, IDs, etc.) before entering the task
 
-**The WRONG Fix:**
-Marking the `@Model` class `@unchecked Sendable` (this violates SwiftData threading rules and causes crashes).
+## 3. Thread hopping
 
-**The RIGHT Fix:**
-Extract structural/primitive types *before* crossing the actor boundary:
+- use `DispatchQueue.main.async` when returning from strict callback threads
+- use `MainActor.assumeIsolated` only when you truly know you are already on main
+- avoid casual `Task { @MainActor in ... }` inside strict realtime callbacks
 
-```swift
-// DO NOT DO THIS:
-Task {
-    // Error: sending non-Sendable 'lesson'
-    await analysisService.analyze(lesson: lesson)
-}
+## 4. Protocol conformance on background callbacks
 
-// DO THIS:
-let audioURL = lesson.audioFileURL
-let isPerformance = lesson.isPerformance
-Task {
-    // Allowed: URL and Bool are Sendable
-    await analysisService.analyze(audioURL: audioURL, isPerformance: isPerformance)
-}
-```
-
-## 3. Hopping Threads properly
-
-SwiftUI requires `@MainActor`. Non-UI tasks require background threads. Do not mix them improperly.
-
-```swift
-// Bad: Using uncontrolled Task inside an audio thread callback (crashes!)
-Task { @MainActor in self.updateUI() }
-
-// Good: Safely dispatching back to main from an unknown strict-C thread
-DispatchQueue.main.async { self.updateUI() }
-
-// Good: Synchronous main-actor assumption (if you ALREADY KNOW you are on main)
-MainActor.assumeIsolated { self.updateUI() }
-```
-
-## 4. `nonisolated func` for Protocol Conformance
-
-If a system protocol (like `SFSpeechRecognizerDelegate`) callback comes on a background thread, but your class is `@MainActor`:
-
-```swift
-// Fails or crashes depending on context
-func speechRecognizer(_ authStatus: SFSpeechRecognizerAuthorizationStatus) { ... }
-
-// Fix
-nonisolated func speechRecognizer(_ authStatus: SFSpeechRecognizerAuthorizationStatus) {
-    Task { @MainActor in
-        self.handleAuth(authStatus)
-    }
-}
-```
-
-*(Note: In UI-callback contexts like this where the system queue isn't a strict realtime audio thread, `Task { @MainActor in }` is acceptable. In CoreAudio realtime threads, it will crash. Use `DispatchQueue.main.async` there.)*
+If a system delegate/callback enters on a background queue but the owning type is `@MainActor`, make the callback `nonisolated` and forward onto main safely.
